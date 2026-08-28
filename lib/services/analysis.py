@@ -179,14 +179,8 @@ class AnalysisService:
             elif mime.startswith("image/") or suffix in (
                 ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"
             ):
-                from PIL import Image
-                import pytesseract
-                result.update({
-                    "extraction": "ocr",
-                    "content": pytesseract.image_to_string(
-                        Image.open(BytesIO(content)), lang="chi_sim+eng"
-                    ),
-                })
+                # OCR 已废弃：图片内容由主 Agent 的视觉模型阅读，分析 Worker 不再执行本地 OCR。
+                result["message"] = "图片正文依赖主 Agent 视觉识别；分析 Worker 不执行本地 OCR。"
             else:
                 result["message"] = "此文件类型暂不支持提取正文。"
         except Exception as exc:
