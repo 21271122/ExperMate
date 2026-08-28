@@ -26,13 +26,11 @@ ExperMate 是一款本地优先的实验记录应用。你可以通过对话记�
 
 ## 快速开始（Windows）
 
-需要 Python 3.12+、Git 和 Git LFS。Git LFS 用于下载内置音频资源。
+需要 Python 3.12+ 和 Git。
 
 ```powershell
 git clone https://github.com/21271122/ExperMate.git
 cd ExperMate
-git lfs install
-git lfs pull
 
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
