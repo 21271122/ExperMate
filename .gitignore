@@ -48,6 +48,9 @@ _tmp_uisfx/
 build/build/
 build/dist/
 
+# 便携版构建产物兜底：任何位置的 dist/ 都不入库（防 git add -A 误提几百 MB 产物）
+/dist/
+
 # 根目录个人草稿，不属于项目文档或运行文件。
 /ziti.docx
 /新建 文本文档.txt

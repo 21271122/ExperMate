@@ -3,8 +3,9 @@
   构建 ExperMate 便携版：PyInstaller onedir + 关键资源校验 + 打包 zip。
 
 .DESCRIPTION
-  产物：dist\ExperMate\（ExperMate.exe + _internal\）与
-       dist\ExperMate-<Version>-portable.zip。
+  产物：build\dist\ExperMate\（ExperMate.exe + _internal\）与
+       build\dist\ExperMate-<Version>-portable.zip。
+  构建产物目录已被 .gitignore 忽略，不会进入版本库。
 
   数据（config.yaml、data\）不随包内预置，由程序在 exe 同目录首次启动时
   自动创建——应用文件夹即数据文件夹，升级只替换 exe 与 _internal。
@@ -35,7 +36,8 @@ param(
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot        # packaging/ 的上一级 = 项目根
 $Spec = Join-Path $PSScriptRoot "ExperMate.spec"
-$Dist = Join-Path $Root "dist"
+# 构建产物统一输出到 build\dist\（已在 .gitignore 忽略，永不入库）
+$Dist = Join-Path $Root "build\dist"
 $AppDir = Join-Path $Dist "ExperMate"
 $Exe = Join-Path $AppDir "ExperMate.exe"
 
