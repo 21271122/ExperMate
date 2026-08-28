@@ -1,0 +1,576 @@
+{% extends "base.html" %}
+{% block title %}{{ exp.title or exp.id }}{% endblock %}
+{% block page_id %}experiment-detail{% endblock %}
+{% block page_bg %}background-color: var(--page-bg-red);{% endblock %}
+{% block topbar_style %}
+.topbar { background: var(--black); }
+.topbar-back { background: var(--white); color: var(--black); border-color: var(--white); }
+.topbar-back:hover { background: var(--black); color: var(--white); }
+{% endblock %}
+{% block content %}
+
+{% set status_labels = {'done':'已完成', 'running':'进行中', 'planned':'计划中', 'repeated':'复刻', 'failed':'失败'} %}
+
+{# Macros #}
+{% macro table_view(rows, headers, keys) %}
+<table class="academic-table">
+  <thead><tr>{% for h in headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for row in rows %}<tr>{% for k in keys %}<td>{{ row.get(k, '') if row is mapping else '' }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+</table>
+{% endmacro %}
+
+{% macro table_edit(name, rows, keys, headers) %}
+<table id="table-{{ name }}" class="academic-table">
+  <thead><tr>{% for h in headers %}<th>{{ h }}</th>{% endfor %}<th style="width:2em"></th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+  <tr data-row="{{ loop.index0 }}">
+    {% for k in keys %}<td><span class="editable-dashed" data-table="{{ name }}" data-row="{{ loop.index0 }}" data-key="{{ k }}" data-label="{{ headers[loop.index0] }}" data-type="textarea" style="display:block;min-width:60px;min-height:1.2em">{{ row.get(k, '') if row is mapping else '' }}</span></td>{% endfor %}
+    <td style="width:2em"><button class="outline row-del" style="font-size:0.7rem;padding:0 0.3rem" onclick="this.closest('tr').remove()">X</button></td>
+  </tr>{% endfor %}
+  </tbody>
+</table>
+<button class="outline" style="font-size:0.75rem;margin-top:0.3rem" onclick='addTableRow("{{ name }}", {{ keys | tojson }}, {{ headers | tojson }})'>+ 添加一行</button>
+{% endmacro %}
+
+{% macro array_edit(name, items) %}
+<ul id="list-{{ name }}" style="list-style:none;padding:0">
+  {% for item in items %}
+  <li style="display:flex;gap:0.3rem;align-items:center;margin-bottom:0.3rem">
+    <span class="editable-dashed" data-array="{{ name }}" data-index="{{ loop.index0 }}" data-type="textarea" data-label="{{ name }}" style="flex:1;min-height:1.2em">{{ item }}</span>
+    <button class="outline row-del" style="font-size:0.7rem;padding:0 0.3rem;flex-shrink:0" onclick="this.closest('li').remove()">X</button>
+  </li>{% endfor %}
+</ul>
+<button class="outline" style="font-size:0.75rem;margin-top:0.3rem" onclick="addArrayItem('{{ name }}')">+ 添加</button>
+{% endmacro %}
+
+{% macro text_field(id, label, value, open) %}
+{% if value %}
+<details class="section-group narrative-section" {% if open %}open{% endif %}>
+  <summary>{{ label }}</summary>
+  <div class="view-mode"><div class="markdown-content">{{ value }}</div></div>
+  <div class="edit-mode" style="display:none">
+    <div class="editable-dashed block markdown-content" data-field="{{ id }}" data-label="{{ label }}" data-type="markdown" data-value="{{ value | e }}">{{ value }}</div>
+  </div>
+</details>
+{% endif %}
+{% endmacro %}
+
+{# ===== Page Content ===== #}
+<style>
+.experiment-detail-header {
+  display:flex; justify-content:space-between; align-items:flex-start;
+  flex-wrap:wrap; gap:0.5rem; margin-bottom:1rem;
+}
+.experiment-detail-meta {
+  font-weight:700; font-size:0.75rem; opacity:0.5; display:block;
+  margin-top:0.1em; letter-spacing:1px;
+}
+.experiment-detail-actions { display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; }
+.experiment-detail-action { font-size:0.75rem; padding:0.25rem 0.6rem; }
+#btn-save:disabled {
+  background:#bdbdbd;
+  border-color:#888;
+  color:#666;
+  cursor:not-allowed;
+  box-shadow:none;
+}
+.archive-badge {
+  display:inline-block; margin-left:0.45rem; padding:0.08rem 0.36rem;
+  border:2px solid var(--black); background:var(--surface-2); color:var(--text-2);
+  font-size:0.66rem; font-weight:900; letter-spacing:0.08em;
+}
+.archive-action { background:var(--surface-2); color:var(--black); }
+.archive-action:hover { background:var(--white); }
+.edit-locked { opacity:0.42; cursor:not-allowed !important; }
+.edit-locked:not(button) { pointer-events:none; user-select:none; }
+
+@media (max-width:600px) and (orientation:portrait) {
+  .experiment-detail-header {
+    display:grid; grid-template-columns:minmax(0, 1fr); gap:0.58rem;
+    margin-bottom:0.85rem; padding-bottom:0.8rem;
+    border-bottom:3px solid var(--black);
+  }
+  .experiment-detail-header h1 { line-height:1.22; }
+  .experiment-detail-meta {
+    display:flex; flex-wrap:wrap; align-items:center; gap:0.2rem 0.45rem;
+    margin-top:0.36rem;
+  }
+  #field-tags-container {
+    display:flex; flex-wrap:wrap; gap:0.2rem; margin:0;
+    opacity:1;
+  }
+  #field-tags-container .tag-pill { margin:0; }
+  .experiment-detail-actions {
+    display:flex; flex-wrap:wrap; justify-content:flex-start;
+    gap:0.32rem; max-width:100%; min-width:0;
+  }
+  .experiment-detail-actions > * { white-space:nowrap; }
+  .experiment-detail-action { font-size:0.68rem; padding:0.23rem 0.48rem; }
+}
+
+@media (max-width:350px) and (orientation:portrait) {
+  .experiment-detail-header h1 { font-size:1.72rem; }
+}
+</style>
+
+<div id="experiment-save-feedback" class="flash" role="status" aria-live="polite" hidden></div>
+
+<div class="experiment-detail-header">
+  <div style="min-width:0">
+    <small style="font-weight:700;font-size:0.75rem;opacity:0.5;letter-spacing:1px">{{ exp.id }}{% if exp.archived %}<span class="archive-badge">已归档</span>{% endif %}</small>
+    <h1 style="margin:0;border-bottom:none;padding-bottom:0" id="field-title">{{ exp.title or '(untitled)' }}</h1>
+    <small class="experiment-detail-meta">
+      <span id="field-date-range">{{ exp.date }}{% if exp.end_date %} ~ {{ exp.end_date }}{% endif %}</span>
+      &middot; <span id="field-experimenter">{{ exp.experimenter or '未填写' }}</span>
+      {% if exp.tags %}
+      <span id="field-tags-container">
+        {% for tag in exp.tags %}<span class="tag-pill" ondblclick="editTag(this)">{{ tag }}</span>{% endfor %}
+      </span>
+      {% endif %}
+    </small>
+  </div>
+  <div class="experiment-detail-actions">
+    <span class="status-badge status-{{ exp.status }}" id="field-status" data-value="{{ exp.status }}">{{ status_labels.get(exp.status, exp.status) }}</span>
+    <button id="btn-child" data-edit-lock class="outline experiment-detail-action" onclick="openChildAgent()">对话编辑</button>
+    <button id="btn-edit" class="outline experiment-detail-action" onclick="toggleEdit()">编辑</button>
+    <button id="btn-save" class="experiment-detail-action" style="display:none" onclick="saveEdit()" disabled aria-disabled="true">保存</button>
+    <button id="btn-cancel" class="outline experiment-detail-action" style="display:none" onclick="cancelEdit()">取消</button>
+    <button id="btn-print" data-edit-lock class="outline experiment-detail-action" onclick="openExperimentPrint('{{ exp.id }}')">PDF</button>
+    <button id="btn-archive" data-edit-lock class="outline experiment-detail-action archive-action" onclick="archiveExp('{{ exp.id }}', {{ 'true' if exp.archived else 'false' }})">{{ '恢复到实验列表' if exp.archived else '归档' }}</button>
+  </div>
+</div>
+
+{# 0. Original Notes #}
+{% if exp.original_notes %}
+{% set is_html = '<' in (exp.original_notes or '') %}
+<details class="section-group narrative-section" id="section-original-notes">
+  <summary>0. 原始记录</summary>
+  <div class="view-mode">
+    {% if is_html %}<div class="rich-notes">{{ exp.original_notes | safe }}</div>
+    {% else %}<div class="markdown-content" style="background:var(--off-white);padding:1rem;border:3px solid var(--black)">{{ exp.original_notes }}</div>{% endif %}
+  </div>
+  <div class="edit-mode" style="display:none">
+    {% if is_html %}
+    <div class="editable-dashed block rich-notes" data-field="original_notes" data-label="Original Notes" data-type="html" data-value="{{ exp.original_notes | e }}">{{ exp.original_notes | safe }}</div>
+    {% else %}
+    <div class="editable-dashed block" data-field="original_notes" data-label="Original Notes" data-type="textarea" style="white-space:pre-wrap;background:var(--off-white);padding:1rem;border:3px solid var(--black)">{{ exp.original_notes }}</div>
+    {% endif %}
+    <button id="btn-regenerate" data-edit-lock style="margin-top:0.5rem" onclick="regenerate('{{ exp.id }}')">Regenerate from Notes</button>
+    <span id="regen-status" style="margin-left:0.5rem;font-weight:700;opacity:0.5"></span>
+  </div>
+</details>
+{% endif %}
+
+{{ text_field("purpose", "1. 实验目的", exp.purpose, true) }}
+
+<details class="section-group" {% if exp.materials %}open{% endif %}><summary>2. 材料与试剂</summary>
+  <div class="view-mode">{{ table_view(exp.materials or [], ["名称","纯度","供应商","用量","备注"], ["name","purity","vendor","amount","notes"]) }}</div>
+  <div class="edit-mode" style="display:none">{{ table_edit("materials", exp.materials or [], ["name","purity","vendor","amount","notes"], ["名称","纯度","供应商","用量","备注"]) }}</div>
+</details>
+
+<details class="section-group" {% if exp.equipment %}open{% endif %}><summary>3. 仪器设备</summary>
+  <div class="view-mode">{{ table_view(exp.equipment or [], ["设备","型号","位置"], ["device","model","location"]) }}</div>
+  <div class="edit-mode" style="display:none">{{ table_edit("equipment", exp.equipment or [], ["device","model","location"], ["设备","型号","位置"]) }}</div>
+</details>
+
+<details class="section-group" {% if exp.experimental_plan %}open{% endif %}><summary>4. 实验方案</summary>
+  <div class="view-mode">{{ table_view(exp.experimental_plan or [], ["组别","条件","预期结果"], ["group","condition","expected"]) }}</div>
+  <div class="edit-mode" style="display:none">{{ table_edit("experimental_plan", exp.experimental_plan or [], ["group","condition","expected"], ["组别","条件","预期结果"]) }}</div>
+</details>
+
+<details class="section-group narrative-section" open><summary>5. 实验步骤</summary>
+  <div class="view-mode"><ol id="sop-list">{% for s in (exp.sop or []) %}<li>{{ s }}</li>{% endfor %}</ol></div>
+  <div class="edit-mode" style="display:none">{{ array_edit("sop", exp.sop or []) }}</div>
+</details>
+
+<details class="section-group" {% if exp.process_parameters %}open{% endif %}><summary>6. 工艺参数</summary>
+  <div class="view-mode">{{ table_view(exp.process_parameters or [], ["步骤","参数","设定值","实际值","偏差"], ["step","parameter","setpoint","actual","deviation"]) }}</div>
+  <div class="edit-mode" style="display:none">{{ table_edit("process_parameters", exp.process_parameters or [], ["step","parameter","setpoint","actual","deviation"], ["步骤","参数","设定值","实际值","偏差"]) }}</div>
+</details>
+
+{% set obs = exp.observations or {} %}
+<details class="section-group narrative-section" {% if obs is mapping and not obs.no_anomalies %}open{% endif %}>
+  <summary>7. 实验观察</summary>
+  <div class="view-mode">
+    {% if obs is mapping %}
+      {% if obs.no_anomalies %}<p style="font-weight:700">未发现异常</p>{% endif %}
+      {% if obs["items"] %}<ul>{% for item in obs["items"] %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+    {% else %}<div class="markdown-content">{{ obs }}</div>{% endif %}
+  </div>
+  <div class="edit-mode" style="display:none">
+    <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" id="edit-observations-no_anomalies" {% if obs is mapping and obs.no_anomalies %}checked{% endif %} style="width:auto"> 未发现异常</label>
+    {{ array_edit("observations_items", obs["items"] if obs is mapping and obs["items"] else []) }}
+  </div>
+</details>
+
+<details class="section-group" {% if exp.characterization %}open{% endif %}><summary>8. 表征与测试</summary>
+  <div class="view-mode">{{ table_view(exp.characterization or [], ["方法","样品编号","制样方式","日期","数据路径"], ["method","sample_id","preparation","submission_date","data_path"]) }}</div>
+  <div class="edit-mode" style="display:none">{{ table_edit("characterization", exp.characterization or [], ["method","sample_id","preparation","submission_date","data_path"], ["方法","样品编号","制样方式","日期","数据路径"]) }}</div>
+</details>
+
+{% set r = exp.results or {} %}
+<details class="section-group" open><summary>9. 实验结果</summary>
+  <div class="view-mode">
+    {% if r is mapping %}
+      {% if r.qualitative %}<h4>定性结果</h4><div class="markdown-content">{{ r.qualitative }}</div>{% endif %}
+      {% if r.key_data %}<h4>关键数据</h4>{{ table_view(r.key_data, ["指标","数值","对比对象","变化"], ["metric","value","comparison","change"]) }}{% endif %}
+    {% else %}<div class="markdown-content">{{ r }}</div>{% endif %}
+  </div>
+  <div class="edit-mode" style="display:none">
+    <label style="font-weight:700;font-size:0.8rem">定性结果</label>
+    <div class="editable-dashed block markdown-content" data-field="results_qualitative" data-label="定性结果" data-type="markdown" data-value="{{ (r.qualitative if r is mapping else '') | e }}">{{ r.qualitative if r is mapping else '' }}</div>
+    <label style="font-weight:700;font-size:0.8rem;margin-top:0.5rem">关键数据</label>
+    {{ table_edit("results_key_data", r.key_data if r is mapping and r.key_data else [], ["metric","value","comparison","change"], ["指标","数值","对比对象","变化"]) }}
+  </div>
+</details>
+
+<details class="section-group" open><summary>10. 实验结论</summary>
+  <div class="view-mode"><div class="markdown-content">{{ exp.conclusion or '' }}</div></div>
+  <div class="edit-mode" style="display:none">
+    <div class="editable-dashed block markdown-content" data-field="conclusion" data-label="实验结论" data-type="markdown" data-value="{{ (exp.conclusion or '') | e }}">{{ exp.conclusion or '' }}</div>
+  </div>
+</details>
+
+<details class="section-group narrative-section" open><summary>11. 下一步计划</summary>
+  <div class="view-mode" id="next-steps-view">{% for s in (exp.next_steps or []) %}<div style="padding:0.2rem 0">{{ s }}</div>{% endfor %}</div>
+  <div class="edit-mode" style="display:none">{{ array_edit("next_steps", exp.next_steps or []) }}</div>
+</details>
+
+<details class="section-group" id="attachment-section" data-edit-lock open>
+  <summary>12. 附件 <span id="attachment-count">{{ (exp.attachments or [])|length }}</span></summary>
+  <div id="attachment-list" style="display:grid;gap:0.45rem;margin:0.7rem 0"></div>
+  <form id="attachment-upload-form" style="display:flex;gap:0.45rem;align-items:center;flex-wrap:wrap">
+    <input id="attachment-file" type="file" multiple accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.pdf,.csv,.txt,.xlsx,image/*,application/pdf,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="max-width:100%">
+    <small id="attachment-file-selection" style="font-weight:700;opacity:0.65">未选择附件</small>
+    <input id="attachment-title" type="text" maxlength="200" placeholder="附件标题（默认文件名）" style="flex:1;min-width:160px">
+    <button id="attachment-upload-btn" type="submit" class="outline" style="font-size:0.75rem">添加附件</button>
+    <small id="attachment-status" style="font-weight:700;opacity:0.65"></small>
+  </form>
+  <small style="display:block;margin-top:0.5rem;opacity:0.65">支持图片、PDF、CSV、TXT；单个文件最大 16 MB。附件会随实验加密同步。</small>
+</details>
+
+{# References #}
+{% if exp.references or exp.referenced_by or exp.analyzed_in %}
+<div style="margin-top:2rem;padding:1rem;border:4px solid var(--black);background:var(--off-white)">
+  <details class="section-group" open>
+    <summary>关联记录</summary>
+    {% if exp.references %}
+    <div style="margin-bottom:0.8rem">
+      <strong style="font-size:0.8rem">引用的实验：</strong>
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.3rem">
+        {% for ref_id in exp.references %}
+        <a href="/experiments/{{ ref_id }}" class="tag-pill" style="text-decoration:none;background:var(--black);color:var(--white);font-weight:700">{{ ref_id }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    {% if exp.referenced_by %}
+    <div style="margin-bottom:0.8rem">
+      <strong style="font-size:0.8rem">被以下实验引用：</strong>
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.3rem">
+        {% for ref_id in exp.referenced_by %}
+        <a href="/experiments/{{ ref_id }}" class="tag-pill" style="text-decoration:none;font-weight:700">{{ ref_id }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    {% if exp.analyzed_in %}
+    <div>
+      <strong style="font-size:0.8rem">已纳入分析：</strong>
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.3rem">
+        {% for anal_id in exp.analyzed_in %}
+        <a href="/analysis/{{ anal_id }}" class="tag-pill" style="text-decoration:none;background:var(--yellow);color:var(--black);font-weight:700">{{ anal_id }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </details>
+</div>
+{% endif %}
+
+<div data-edit-lock style="text-align:center;margin-top:2rem">
+  <a href="/" role="button" class="outline">&larr; 返回首页</a>
+</div>
+
+{# Edit Modal #}
+<div class="edit-modal-overlay" id="edit-modal">
+  <div class="edit-modal-box">
+    <div class="edit-modal-label" id="edit-modal-label"></div>
+    <div class="edit-modal-toolbar" id="edit-modal-toolbar">
+      <button title="Bold" onclick="execCmd('bold')"><b>B</b></button>
+      <button title="Italic" onclick="execCmd('italic')"><i>I</i></button>
+      <button title="Underline" onclick="execCmd('underline')"><u>U</u></button>
+      <button title="Strikethrough" onclick="execCmd('strikeThrough')"><s>S</s></button>
+      <span class="tb-sep"></span>
+      <button title="UL" onclick="execCmd('insertUnorderedList')">&#x2022;</button>
+      <button title="OL" onclick="execCmd('insertOrderedList')">1.</button>
+      <button title="Quote" onclick="execCmd('formatBlock', 'BLOCKQUOTE')">&ldquo;</button>
+      <span class="tb-sep"></span>
+      <button title="Link" onclick="execLink()">&#x1f517;</button>
+    </div>
+    <textarea class="edit-modal-input" id="edit-modal-input" rows="1"></textarea>
+    <div class="edit-modal-rich" id="edit-modal-rich" contenteditable="true" style="display:none"></div>
+    <input type="date" class="edit-modal-date" id="edit-modal-date" style="display:none">
+    <div class="edit-modal-actions">
+      <button class="outline" onclick="closeEditModal(false)">取消</button>
+      <button onclick="closeEditModal(true)">确认</button>
+    </div>
+  </div>
+</div>
+
+{# Child Agent Modal #}
+<div class="edit-modal-overlay experiment-pane-modal pane-scoped-modal" id="child-modal">
+<div class="edit-modal-box child-agent-box" style="max-width:520px;width:95%;height:70vh;display:flex;flex-direction:column">
+<div class="child-agent-head" style="padding:0.5rem;font-weight:700;border-bottom:3px solid var(--black);display:flex;align-items:center;justify-content:space-between">
+  <span>编辑 {{ exp.id }}</span>
+  <button onclick="closeChildAgent()" style="border:2px solid var(--black);background:var(--white);color:var(--black);padding:0.2rem 0.6rem;font-weight:700;cursor:pointer;font-size:0.85rem">关闭</button>
+</div>
+<div id="child-legacy" class="flash" style="display:none;margin:0.5rem">
+  该实验还没有聊天记录，你可以直接与 Agent 对话来修改它。
+  <button onclick="confirmLegacy()" style="margin-left:0.5rem">开始对话</button>
+</div>
+<div id="child-msgs" class="child-msgs" style="flex:1;overflow-y:auto;padding:0.5rem;min-height:200px;max-height:50vh;display:flex;flex-direction:column;gap:0.3rem"></div>
+<div id="child-preview" style="display:none;padding:0.5rem;border:3px solid var(--black);margin:0.5rem"><div id="child-preview-content"></div></div>
+<small id="child-status-bar" class="child-status-bar" style="display:none;padding:0.3rem 0.5rem;font-weight:700;font-size:0.7rem;color:var(--text-3)"></small>
+<div id="child-color-divider" class="child-color-divider" style="display:flex;height:3px;margin:0 0.5rem 4px"><span class="cd-red" style="flex:1;background:var(--red);transition:flex-grow .8s cubic-bezier(.4,0,.2,1)"></span><span class="cd-white" style="flex:1;background:var(--white);transition:flex-grow .8s cubic-bezier(.4,0,.2,1)"></span><span class="cd-yellow" style="flex:1;background:var(--yellow);transition:flex-grow .8s cubic-bezier(.4,0,.2,1)"></span><span class="cd-blue" style="flex:1;background:var(--blue);transition:flex-grow .8s cubic-bezier(.4,0,.2,1)"></span></div>
+<div class="child-input-area" style="display:flex;align-items:stretch;gap:10px;padding:0 0.5rem 0.5rem">
+  <div class="child-input-wrapper" style="flex:1;min-width:0;display:flex;align-items:center;border:3px solid var(--black);padding:4px 10px;background:var(--white)">
+    <textarea id="child-input" placeholder="描述需要修改的内容…" data-idle-placeholder="描述需要修改的内容…" rows="1" style="flex:1;min-width:0;min-height:24px;max-height:140px;border:none;outline:none;resize:none;font-family:inherit;font-size:0.88rem;line-height:1.5;padding:2px 0;margin:0;color:var(--black);background:transparent" onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!window._childBusy){event.preventDefault();sendChildMsg();}"></textarea>
+  </div>
+  <button id="btn-child-send" onclick="sendChildMsg()" class="child-send-button" style="flex-shrink:0;padding:4px 14px;border:3px solid var(--black);background:var(--yellow);color:var(--black);cursor:pointer;font-family:inherit;font-size:0.78rem;font-weight:700;letter-spacing:1px">发送</button>
+</div>
+</div>
+</div>
+
+<style>
+#child-modal.experiment-pane-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 1200;
+  padding: 1rem;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.5);
+  pointer-events: auto;
+}
+#child-modal.experiment-pane-modal.active { display: flex; }
+#child-modal.experiment-pane-modal .edit-modal-box {
+  max-height: min(75vh, calc(100% - 2rem));
+  pointer-events: auto;
+}
+body > #child-modal.experiment-pane-modal {
+  position: fixed;
+}
+</style>
+
+<script>
+// Page-specific: set experiment ID for external JS modules
+document.body.dataset.childAgentKind = 'experiment';
+document.body.dataset.expId = '{{ exp.id }}';
+delete document.body.dataset.analysisId;
+document.body.dataset.expRevision = '{{ exp.revision or 0 }}';
+
+window.showExperimentSaveFeedback = function (message, kind, actionLabel, action) {
+  var feedback = document.getElementById("experiment-save-feedback");
+  if (!feedback) return;
+  feedback.className = "flash " + (kind === "error" ? "flash-error" : "flash-success");
+  feedback.textContent = message;
+  feedback.hidden = false;
+  if (actionLabel && typeof action === "function") {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "outline";
+    button.textContent = actionLabel;
+    button.style.marginLeft = "0.6rem";
+    button.addEventListener("click", action);
+    feedback.appendChild(button);
+  }
+  if (kind !== "error") {
+    clearTimeout(feedback._hideTimer);
+    feedback._hideTimer = setTimeout(function () { feedback.hidden = true; }, 4200);
+  }
+};
+
+(function () {
+  try {
+    var notice = JSON.parse(sessionStorage.getItem("exdiary_experiment_save_notice") || "null");
+    sessionStorage.removeItem("exdiary_experiment_save_notice");
+    if (notice && notice.message) window.showExperimentSaveFeedback(notice.message, notice.kind || "success");
+  } catch (_) { /* private mode or an invalid stale notice: ignore it */ }
+})();
+
+(function () {
+  var expId = '{{ exp.id }}';
+  var list = document.getElementById('attachment-list');
+  var count = document.getElementById('attachment-count');
+  var status = document.getElementById('attachment-status');
+  var form = document.getElementById('attachment-upload-form');
+  var fileInput = document.getElementById('attachment-file');
+  var titleInput = document.getElementById('attachment-title');
+  var uploadBtn = document.getElementById('attachment-upload-btn');
+  var selectedFiles = [];
+
+  function formatSize(size) {
+    if (size < 1024) return size + ' B';
+    if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
+    return (size / 1024 / 1024).toFixed(1) + ' MB';
+  }
+
+  function attachmentTypeLabel(item) {
+    var name = (item.name || '').toLowerCase();
+    var mime = (item.mime || '').toLowerCase();
+    if (mime.indexOf('image/') === 0 || /\.(png|jpe?g|gif|webp|bmp)$/i.test(name)) return '图片';
+    if (name.endsWith('.xlsx') || mime.indexOf('spreadsheetml') >= 0) return 'Excel 表格';
+    if (name.endsWith('.pdf') || mime === 'application/pdf') return 'PDF 文档';
+    if (name.endsWith('.csv') || name.endsWith('.tsv') || mime === 'text/csv') return '表格数据';
+    if (name.endsWith('.txt') || mime.indexOf('text/') === 0) return '文本文件';
+    return '附件';
+  }
+
+  async function openAttachment(item, download) {
+    if (!download && window.AttachmentViewer) { AttachmentViewer.open(item); return; }
+    if (!download && isImage(item)) { showImagePreview(item); return; }
+    if (download && window.AttachmentViewer) {
+      try { await AttachmentViewer.download(item); }
+      catch (error) { setStatus(error.message || '附件下载失败'); }
+      return;
+    }
+    var previewWindow = download ? null : window.open('', '_blank');
+    try {
+      var response = await fetch(item.url);
+      if (!response.ok) throw new Error('附件读取失败');
+      var blob = await response.blob();
+      var objectUrl = URL.createObjectURL(blob);
+      if (download) {
+        var link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = item.name || 'attachment';
+        link.click();
+      } else if (previewWindow) {
+        previewWindow.location.href = objectUrl;
+      } else {
+        window.location.href = objectUrl;
+      }
+      setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 60000);
+    } catch (error) {
+      if (previewWindow) previewWindow.close();
+      setStatus(error.message || '附件读取失败');
+    }
+  }
+
+  function isImage(item) {
+    return (item.mime || '').indexOf('image/') === 0 || /\.(png|jpe?g|gif|webp|bmp)$/i.test(item.name || '');
+  }
+
+  async function loadImagePreview(item, image) {
+    try {
+      var response = await fetch(item.url);
+      if (!response.ok) throw new Error('图片读取失败');
+      var objectUrl = URL.createObjectURL(await response.blob());
+      image.src = objectUrl;
+      image.alt = item.title || item.caption || item.name || '附件图片';
+    } catch (error) { image.replaceWith(document.createTextNode(error.message || '图片读取失败')); }
+  }
+
+  async function showImagePreview(item) {
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.86);display:flex;align-items:center;justify-content:center;padding:2rem';
+    var close = document.createElement('button'); close.type = 'button'; close.textContent = '× 关闭';
+    close.style.cssText = 'position:absolute;right:1rem;top:1rem;background:var(--white);color:var(--black);border:3px solid var(--black);font-weight:700;padding:.35rem .6rem;cursor:pointer';
+    var image = document.createElement('img'); image.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;background:var(--white)';
+    var dismiss = function () { overlay.remove(); document.removeEventListener('keydown', onKey); };
+    var onKey = function (event) { if (event.key === 'Escape') dismiss(); };
+    close.addEventListener('click', dismiss);
+    overlay.addEventListener('click', function (event) { if (event.target === overlay) dismiss(); });
+    overlay.append(close, image); document.body.appendChild(overlay); document.addEventListener('keydown', onKey);
+    await loadImagePreview(item, image);
+  }
+
+  function setStatus(text) { status.textContent = text || ''; }
+  function render(items) {
+    list.innerHTML = '';
+    count.textContent = items.length;
+    if (!items.length) {
+      var empty = document.createElement('small'); empty.textContent = '还没有附件。'; empty.style.opacity = '0.65'; list.appendChild(empty); return;
+    }
+    items.forEach(function (item) {
+      var row = document.createElement('details'); row.style.cssText = 'border:2px solid var(--black);padding:0.45rem 0.6rem;background:var(--off-white)';
+      row.open = isImage(item);
+      var heading = document.createElement('summary'); heading.style.cssText = 'display:flex;align-items:center;gap:0.5rem;font-weight:700;cursor:pointer';
+      var headingTitle = document.createElement('span'); headingTitle.textContent = item.title || item.caption || item.name || item.sha256; headingTitle.style.cssText = 'flex:1;min-width:0;overflow-wrap:anywhere';
+      var headingActions = document.createElement('span'); headingActions.style.cssText = 'display:flex;gap:0.35rem;align-items:center;flex-shrink:0';
+      var body = document.createElement('div'); body.style.cssText = 'display:flex;gap:0.55rem;align-items:center;flex-wrap:wrap;padding-top:0.55rem';
+      var main = document.createElement('div'); main.style.cssText = 'flex:1;min-width:180px';
+      var meta = document.createElement('small'); meta.style.cssText = 'display:block;opacity:0.7';
+      meta.textContent = [formatSize(item.size || 0), attachmentTypeLabel(item), item.sync_state === 'synced' ? '已同步' : '待同步'].join(' · ');
+      main.append(meta);
+      if (item.description) { var note = document.createElement('small'); note.style.cssText = 'display:block;margin-top:0.3rem'; note.textContent = item.description; main.appendChild(note); }
+      if (isImage(item)) {
+        var image = document.createElement('img'); image.style.cssText = 'display:block;max-width:100%;max-height:340px;object-fit:contain;border:2px solid var(--black);margin-top:0.5rem;cursor:zoom-in';
+        image.addEventListener('click', function () { showImagePreview(item); });
+        main.appendChild(image); loadImagePreview(item, image);
+      } else {
+        var name = document.createElement('button'); name.type = 'button'; name.textContent = item.name || item.sha256; name.style.cssText = 'font-weight:700;color:var(--black);padding:0;border:0;background:none;text-decoration:underline;cursor:pointer;margin-top:0.35rem';
+        name.addEventListener('click', function () { openAttachment(item, false); }); main.appendChild(name);
+      }
+      var download = document.createElement('button'); download.type = 'button'; download.textContent = '下载'; download.className = 'outline'; download.style.cssText = 'font-size:0.7rem;padding:0.15rem 0.45rem';
+      download.addEventListener('click', function (event) { event.preventDefault(); event.stopPropagation(); openAttachment(item, true); });
+      var remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '移除'; remove.className = 'outline danger'; remove.style.cssText = 'font-size:0.7rem;padding:0.15rem 0.45rem';
+      remove.addEventListener('click', async function (event) {
+        event.preventDefault(); event.stopPropagation();
+        if (!confirm('仅从当前实验移除此附件？附件文件不会立即删除。')) return;
+        var response = await fetch('/api/experiments/' + encodeURIComponent(expId) + '/attachments/' + encodeURIComponent(item.sha256) + '?expected_revision=' + encodeURIComponent(document.body.dataset.expRevision || 0), {method: 'DELETE'});
+        var data = await response.json().catch(function () { return {}; });
+        if (!response.ok || !data.ok) { setStatus(data.error || '移除失败'); return; }
+        if (data.revision !== undefined) document.body.dataset.expRevision = data.revision;
+        if (window.ExdiarySound) window.ExdiarySound.play('delete');
+        load();
+      });
+      headingActions.append(download, remove); heading.append(headingTitle, headingActions);
+      body.append(main); row.append(heading, body); list.appendChild(row);
+    });
+  }
+  async function load() {
+    try {
+      var response = await fetch('/api/experiments/' + encodeURIComponent(expId) + '/attachments');
+      var data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || '附件加载失败');
+      render(data.attachments || []);
+    } catch (error) { setStatus(error.message || '附件加载失败'); }
+  }
+  form.addEventListener('submit', async function (event) {
+    event.preventDefault();
+    var files = selectedFiles.length ? selectedFiles : Array.prototype.slice.call(fileInput.files || []);
+    if (!files.length) { setStatus('请选择附件'); return; }
+    uploadBtn.disabled = true;
+    try {
+      for (var i = 0; i < files.length; i++) {
+        setStatus('正在添加 ' + (i + 1) + '/' + files.length + '…');
+        var body = new FormData(); body.append('experiment_id', expId); body.append('file', files[i]);
+        body.append('expected_revision', document.body.dataset.expRevision || 0);
+        if (titleInput.value.trim()) body.append('title', titleInput.value.trim());
+        var response = await fetch('/api/attachments', {method: 'POST', body: body});
+        var data = await response.json().catch(function () { return {}; });
+        if (!response.ok || !data.ok) throw new Error(data.error || '附件添加失败');
+        if (data.revision !== undefined) document.body.dataset.expRevision = data.revision;
+      }
+      selectedFiles = []; fileInput.value = ''; titleInput.value = '';
+      document.getElementById('attachment-file-selection').textContent = '未选择附件';
+      setStatus('附件已添加'); await load();
+    } catch (error) { setStatus(error.message || '附件添加失败'); }
+    finally { uploadBtn.disabled = false; }
+  });
+  fileInput.addEventListener('change', function () {
+    var files = Array.prototype.slice.call(fileInput.files || []);
+    selectedFiles = files;
+    var selection = document.getElementById('attachment-file-selection');
+    if (!files.length) { selection.textContent = '未选择附件'; return; }
+    selection.textContent = files.length === 1 ? '已选择：' + files[0].name : '已选择 ' + files.length + ' 个附件';
+    setStatus('点击“添加附件”开始上传');
+  });
+  load();
+})();
+</script>
+
+{% endblock %}

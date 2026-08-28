@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}{{ analysis.get('id', '分析报告') }}{% endblock %}
+{% block page_id %}analysis-detail{% endblock %}
+{% block page_bg %}background-color: var(--page-bg-red);{% endblock %}
+{% block topbar_style %}
+.topbar { background: var(--red); }
+.topbar-back { background: var(--white); color: var(--red); border-color: var(--white); }
+.topbar-back:hover { background: var(--red); color: var(--white); }
+{% endblock %}
+{% block content %}
+
+<h1 style="border-bottom:none;padding-bottom:0;margin-bottom:0.3rem">{{ analysis.get('id', '') }}</h1>
+<div style="font-weight:700;font-size:0.75rem;opacity:0.5;letter-spacing:1px;margin-bottom:1rem">{{ analysis.get('timestamp', '') }}</div>
+
+{# Question #}
+<div style="border:4px solid var(--black);padding:0.8rem 1rem;margin-bottom:1rem;background:var(--off-white)">
+  <strong style="font-size:0.78rem;text-transform:uppercase;letter-spacing:1px">Question</strong>
+  <p style="margin:0.3rem 0 0 0;font-weight:600;font-size:0.9rem">{{ analysis.get('question', '') }}</p>
+</div>
+
+{# Referenced experiments #}
+{% set refs = analysis.get('selected_ids', []) %}
+{% if refs %}
+<div style="border:4px solid var(--black);padding:0.8rem 1rem;margin-bottom:1rem">
+  <strong style="font-size:0.78rem;text-transform:uppercase;letter-spacing:1px">Referenced Experiments ({{ refs|length }})</strong>
+  <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.3rem">
+    {% for rid in refs %}
+    <a href="/experiments/{{ rid }}" class="tag-pill" style="text-decoration:none;font-weight:700">{{ rid }}</a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if source_snapshot %}
+<div style="border:3px solid var(--black);padding:0.65rem 0.8rem;margin-bottom:1rem;font-size:0.78rem;font-weight:700;line-height:1.5;{% if stale_ids %}border-left:8px solid var(--red);{% else %}border-left:8px solid var(--blue);{% endif %}">
+  证据快照：{{ source_snapshot.get('generated_at', '') }} · {{ (source_snapshot.get('records') or [])|length }} 条实验 · {{ (source_snapshot.get('attachments') or [])|length }} 个附件
+  {% if stale_ids %}<br>其中 {{ stale_ids|join('、') }} 已在报告生成后更新；本报告仍基于当时的快照。{% endif %}
+</div>
+{% endif %}
+
+{# Actions #}
+<div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1.5rem">
+  <button class="outline" style="font-size:0.75rem" onclick="openAnalysisChildAgent()">分析对话</button>
+  <button class="outline" style="font-size:0.75rem" onclick="openAnalysisPrint('{{ analysis.get('id', '') }}')">打印</button>
+  <button class="outline danger" style="font-size:0.75rem" onclick="deleteAnalysis()">删除</button>
+</div>
+
+<hr style="border:3px solid var(--black)">
+
+{# Report body #}
+<div class="markdown-content" style="line-height:1.7;margin-top:1rem">{{ analysis.get('analysis', '') }}</div>
+
+{# Child Agent Modal #}
+<div class="edit-modal-overlay analysis-pane-modal pane-scoped-modal" id="child-modal">
+  <div class="edit-modal-box child-agent-box" style="max-width:520px;width:95%;height:70vh;display:flex;flex-direction:column">
+    <div class="child-agent-head" style="padding:0.5rem;font-weight:700;border-bottom:3px solid var(--black);display:flex;align-items:center;justify-content:space-between">
+      <span>分析对话 {{ analysis.get('id', '') }}</span>
+      <button onclick="closeChildAgent()" style="border:2px solid var(--black);background:var(--white);color:var(--black);padding:0.2rem 0.6rem;font-weight:700;cursor:pointer;font-size:0.85rem">关闭</button>
+    </div>
+    <div id="child-legacy" class="flash" style="display:none;margin:0.5rem">
+      该分析报告还没有聊天记录，你可以直接与 Agent 对话核对相关实验和报告结论。
+      <button onclick="confirmLegacy()" style="margin-left:0.5rem">开始对话</button>
+    </div>
+    <div id="child-msgs" class="child-msgs" style="flex:1;overflow-y:auto;padding:0.5rem;min-height:200px;max-height:50vh;display:flex;flex-direction:column;gap:0.3rem"></div>
+    <div id="child-preview" style="display:none;padding:0.5rem;border:3px solid var(--black);margin:0.5rem"><div id="child-preview-content"></div></div>
+    <small id="child-status-bar" class="child-status-bar" style="display:none;padding:0.3rem 0.5rem;font-weight:700;font-size:0.7rem;color:var(--text-3)"></small>
+    <div id="child-color-divider" class="child-color-divider" style="display:flex;height:3px;margin:0 0.5rem 4px"><span class="cd-red" style="flex:1;background:var(--red);transition:flex-grow .8s cubic-bezier(.4,0,.2,1)"></span><span class="cd-white" style="flex:1;background:var(--white);transition:flex-grow .8s cubic-bezier(.4,0,.2,1)"></span><span class="cd-yellow" style="flex:1;background:var(--yellow);transition:flex-grow .8s cubic-bezier(.4,0,.2,1)"></span><span class="cd-blue" style="flex:1;background:var(--blue);transition:flex-grow .8s cubic-bezier(.4,0,.2,1)"></span></div>
+    <div class="child-input-area" style="display:flex;align-items:stretch;gap:10px;padding:0 0.5rem 0.5rem">
+      <div class="child-input-wrapper" style="flex:1;min-width:0;display:flex;align-items:center;border:3px solid var(--black);padding:4px 10px;background:var(--white)">
+        <textarea id="child-input" placeholder="输入想核对的问题…" data-idle-placeholder="输入想核对的问题…" rows="1" style="flex:1;min-width:0;min-height:24px;max-height:140px;border:none;outline:none;resize:none;font-family:inherit;font-size:0.88rem;line-height:1.5;padding:2px 0;margin:0;color:var(--black);background:transparent" onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!window._childBusy){event.preventDefault();sendChildMsg();}"></textarea>
+      </div>
+      <button id="btn-child-send" onclick="sendChildMsg()" class="child-send-button" style="flex-shrink:0;padding:4px 14px;border:3px solid var(--black);background:var(--yellow);color:var(--black);cursor:pointer;font-family:inherit;font-size:0.78rem;font-weight:700;letter-spacing:1px">发送</button>
+    </div>
+  </div>
+</div>
+
+<style>
+#child-modal.analysis-pane-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 1200;
+  padding: 1rem;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.5);
+  pointer-events: auto;
+}
+#child-modal.analysis-pane-modal.active { display: flex; }
+#child-modal.analysis-pane-modal .edit-modal-box {
+  width: min(520px, calc(100% - 2rem));
+  max-height: min(75vh, calc(100% - 2rem));
+  pointer-events: auto;
+}
+body > #child-modal.analysis-pane-modal {
+  position: fixed;
+}
+</style>
+
+<script>
+window.savePageState = function() { return {scrollY: window.scrollY}; };
+window.restorePageState = function(state) { if (state && state.scrollY !== undefined) window.scrollTo(0, state.scrollY); };
+
+function escHtml(s) { var d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+
+function deleteAnalysis() {
+  if (!confirm('Delete {{ analysis.get("id", "") }}?')) return;
+  fetch('/api/analysis-history/{{ analysis.get("id", "") }}', {method:'DELETE'})
+    .then(function(r) { return r.json(); })
+    .then(function(r) { if (r.ok) { if (window.ExdiarySound) window.ExdiarySound.play('delete'); navigateToPage('/analyze'); } else alert('Failed'); });
+}
+
+document.body.dataset.childAgentKind = 'analysis';
+document.body.dataset.analysisId = '{{ analysis.get("id", "") }}';
+window.openAnalysisChildAgent = function() { window.openChildAgent(); };
+</script>
+
+{% endblock %}

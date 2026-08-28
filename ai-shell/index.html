@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="exdiary-version" content="1.0.0">
+<link rel="icon" type="image/png" href="/static/img/favicon.png">
+<title>ExperMate｜小同门</title>
+<script>
+/* 主题防闪烁：首帧前应用 localStorage 偏好或系统偏好（'dark' | 'light'，无键 = 跟随系统） */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('exdiary_theme'); } catch (e) {}
+  if (t !== 'dark' && t !== 'light') {
+    t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  }
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
+<link rel="stylesheet" href="/ai-shell/static/css/shell.css?v=20260824-font-pairing3">
+<link rel="stylesheet" href="/static/css/de-stijl.css?v=20260825-child-streaming">
+<link rel="stylesheet" href="/static/css/components.css?v=20260822-preview-mobile">
+<link rel="stylesheet" href="/static/css/motion.css?v=20260818e">
+<script src="/static/vendor/marked/marked.min.js"></script>
+<script>if(typeof marked==='undefined'){marked={parse:function(t){return t.replace(/</g,'&lt;').replace(/>/g,'&gt;')}}}</script>
+<script src="/static/vendor/quill/quill.js"></script>
+<link href="/static/vendor/quill/quill.snow.css" rel="stylesheet">
+</head>
+<body>
+
+<div id="app-shell">
+  <!-- Main Split -->
+  <div id="main-split">
+    <!-- Chat Panel -->
+    <div id="chat-panel">
+      <div id="chat-header">
+        <a href="/" id="chat-brand" title="ExperMate｜小同门"><span class="dot"></span><span class="brand-letters"><span>E</span><span>x</span><span>p</span><span>e</span><span>r</span><span>M</span><span>a</span><span>t</span><span>e</span></span></a>
+        <span id="mode-badge">自由</span>
+        <a href="#" id="chat-header-auth" onclick="showAccountModal();return false">登录/注册</a>
+        <button id="chat-history-search" title="查找聊天记录" aria-label="查找聊天记录"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 4.5h12v8.3H9.6L6 16v-3.2H3.5z"></path><circle cx="16.5" cy="16.5" r="3.2"></circle><path d="m18.8 18.8 2 2"></path></svg></button>
+        <a href="#" id="chat-header-settings" title="设置" aria-label="设置" onclick="PanelManager.navigate('/settings');return false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16M9 5v4M15 10v4M11 15v4"></path></svg></a>
+      </div>
+      <div id="chat-top">
+        <div id="chat-messages">
+          <div class="chat-empty">
+            <h2>ExperMate｜小同门</h2>
+            <p>你可以询问实验、查找记录、分析数据，或直接描述一次新实验。</p>
+          </div>
+        </div>
+        <small id="status-bar"></small>
+        <div id="quick-replies"></div>
+      </div>
+      <div id="color-divider">
+        <span class="cd-red"></span><span class="cd-white"></span><span class="cd-yellow"></span><span class="cd-blue"></span>
+      </div>
+      <div id="chat-input-area">
+        <div id="content-restore-btn" title="Restore panel" onclick="PanelManager.restoreContent()"></div>
+        <input id="chat-attachment-file" type="file" multiple accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.pdf,.csv,.txt,.xlsx,.mp3,.ogg,.wav,.m4a,.aac,.flac,image/*,audio/*,application/pdf,text/csv,text/plain" style="display:none">
+        <button id="btn-chat-attachment" class="outline" type="button" title="添加聊天附件" aria-label="添加聊天附件" style="padding:0.35rem 0.5rem">＋</button>
+        <div id="chat-input-wrapper">
+          <textarea id="chat-input" placeholder="输入消息…" rows="1"></textarea>
+          <div id="chat-attachment-drafts" style="display:flex;gap:0.25rem;flex-wrap:wrap;margin-top:0.3rem"></div>
+        </div>
+        <button id="btn-send" disabled>发送</button>
+      </div>
+    </div>
+
+    <!-- Draggable Divider -->
+    <div id="divider"></div>
+
+    <!-- Content Panel -->
+    <div id="content-panel">
+      <div id="content-header">
+        <button id="content-header-back" title="返回上一页" onclick="PanelManager.back()">&#x2190;</button>
+        <span id="content-header-title"></span>
+        <span id="content-header-track" title="当前背景音乐" style="display:none;margin-left:auto;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.72rem;font-weight:700;opacity:0.82"></span>
+        <span id="content-header-menu-wrap" style="position:relative">
+          <button id="content-header-menu-btn" title="Menu" style="background:none;border:1.5px solid rgba(255,255,255,0.5);color:inherit;cursor:pointer;font-size:1rem;font-weight:700;padding:0 5px;font-family:inherit;line-height:1">&#x22ee;</button>
+          <div id="content-header-menu-dd" style="display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:999;background:var(--white);border:4px solid var(--black);box-shadow:var(--shadow);min-width:140px;padding:0.3rem 0">
+            <div class="menu-item" data-action="search" style="padding:0.5rem 1rem;font-size:0.82rem;font-weight:600;cursor:pointer;color:var(--black);white-space:nowrap">&#x1F50D; Search</div>
+            <div class="menu-item" data-action="categories" style="padding:0.5rem 1rem;font-size:0.82rem;font-weight:600;cursor:pointer;color:var(--black);white-space:nowrap">&#x1F4C1; Categories</div>
+            <div class="menu-item" data-action="filters" style="padding:0.5rem 1rem;font-size:0.82rem;font-weight:600;cursor:pointer;color:var(--black);white-space:nowrap">&#x2699; Filters</div>
+            <div class="menu-item" data-action="compare" style="padding:0.5rem 1rem;font-size:0.82rem;font-weight:600;cursor:pointer;color:var(--black);white-space:nowrap">&#x2696; Compare</div>
+          </div>
+        </span>
+        <a href="/settings" id="content-header-settings" title="设置" aria-label="设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16M9 5v4M15 10v4M11 15v4"></path></svg></a>
+      </div>
+      <div id="content-body">
+        <div id="canvas-container">
+          <canvas id="de-stijl-canvas"></canvas>
+          <!-- 常驻便签板：数据感知 / 导航图例 / 模式状态 -->
+          <div id="agent-tip">
+            <div class="nb-head"><span>小同门实验笔记</span><span class="nb-date" id="nb-date"></span></div>
+            <div id="nb-body"></div>
+          </div>
+          <!-- hover 提示条（底部中央） -->
+          <div id="hover-tip"></div>
+        </div>
+        <!-- 片段内容通过 fetch 注入到这里 -->
+        <div id="fragment-mount" style="display:none"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile floating button: tap to restore chat panel -->
+  <button id="chat-float-btn" title="Open Chat" onclick="PanelManager.expandChat()">&#x2191;</button>
+</div>
+
+<!-- Account Modal -->
+<div id="account-modal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.5);align-items:center;justify-content:center">
+  <div style="background:var(--white);border:6px solid var(--black);box-shadow:12px 12px 0 var(--shadow-color);width:340px;max-width:90vw">
+    <div style="display:flex;align-items:center;justify-content:space-between;background:var(--black);color:var(--white);padding:10px 16px;font-size:0.9rem;font-weight:700"><span>账户</span><button type="button" onclick="closeAccountModal()" aria-label="关闭账户菜单" style="border:0;background:transparent;color:inherit;font:700 1.2rem/1 inherit;cursor:pointer">&times;</button></div>
+    <div style="padding:18px 20px"><strong id="account-modal-name" style="display:block;margin-bottom:14px"></strong><button type="button" class="outline" style="display:block;width:100%;margin-bottom:8px" onclick="closeAccountModal();showChangePwModal()">修改密码</button><button type="button" class="outline" style="display:block;width:100%;margin-bottom:8px" onclick="closeAccountModal();showChangeEmailModal()">修改恢复邮箱</button><button type="button" class="outline" style="display:block;width:100%;margin-bottom:8px" onclick="closeAccountModal();PanelManager.navigate('/settings')">设置</button><button type="button" class="outline danger" style="display:block;width:100%" onclick="logoutAccount()">退出登录</button></div>
+  </div>
+</div>
+
+<!-- Auth Modal -->
+<div id="auth-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center">
+  <div style="background:var(--white);border:6px solid var(--black);box-shadow:12px 12px 0px var(--shadow-color);width:340px;max-width:90vw;position:relative">
+    <button onclick="closeAuthModal()" style="position:absolute;top:8px;right:12px;background:none;border:none;font-size:1.2rem;font-weight:900;cursor:pointer;color:var(--white);z-index:1">&times;</button>
+    <div style="background:var(--black);color:var(--white);padding:10px 16px;font-size:0.9rem;font-weight:700;letter-spacing:1px" id="auth-modal-title">登录</div>
+    <div style="padding:20px 20px 16px">
+      <form id="auth-form" onsubmit="handleAuth(event)">
+        <label style="font-size:0.72rem;font-weight:700;display:block;margin-bottom:4px">用户名</label>
+        <input type="text" id="auth-username" required autocomplete="username" style="width:100%;padding:6px 8px;font-size:0.85rem;border:3px solid var(--black);margin-bottom:12px;box-sizing:border-box">
+        <label style="font-size:0.72rem;font-weight:700;display:block;margin-bottom:4px">密码</label>
+        <input type="password" id="auth-password" required autocomplete="current-password" style="width:100%;padding:6px 8px;font-size:0.85rem;border:3px solid var(--black);margin-bottom:12px;box-sizing:border-box">
+        <div id="auth-email-wrap" style="display:none">
+          <label style="font-size:0.72rem;font-weight:700;display:block;margin-bottom:4px">恢复邮箱（忘记密码靠它找回）</label>
+          <input type="email" id="auth-email" autocomplete="email" style="width:100%;padding:6px 8px;font-size:0.85rem;border:3px solid var(--black);margin-bottom:16px;box-sizing:border-box">
+        </div>
+        <div id="auth-error" style="display:none;color:var(--red);font-size:0.75rem;font-weight:600;margin-bottom:10px"></div>
+        <button type="submit" id="auth-submit-btn" style="width:100%;padding:8px;background:var(--black);color:var(--white);border:3px solid var(--black);font-size:0.85rem;font-weight:700;cursor:pointer;letter-spacing:1px">LOGIN</button>
+      </form>
+      <div style="text-align:center;margin-top:12px;font-size:0.72rem">
+        <span id="auth-toggle-text">没有账号？</span>
+        <a href="#" id="auth-toggle-link" onclick="toggleAuthMode();return false" style="color:var(--blue);font-weight:700;text-decoration:none">注册</a>
+      </div>
+      <div style="text-align:center;margin-top:4px;font-size:0.72rem">
+        <a href="#" onclick="showForgot();return false" style="color:var(--blue);font-weight:700;text-decoration:none">忘记密码？</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Forgot Password Modal -->
+<div id="forgot-modal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.5);align-items:center;justify-content:center">
+  <div style="background:var(--white);border:6px solid var(--black);box-shadow:12px 12px 0 var(--shadow-color);width:340px;max-width:90vw">
+    <div style="background:var(--black);color:var(--white);padding:10px 16px;font-size:0.9rem;font-weight:700">忘记密码</div>
+    <div style="padding:20px">
+      <div id="forgot-step1">
+        <label style="font-size:0.72rem;font-weight:700;display:block;margin-bottom:4px">账号</label>
+        <input id="forgot-account" style="width:100%;padding:6px 8px;font-size:0.85rem;border:3px solid var(--black);margin-bottom:12px;box-sizing:border-box">
+        <label style="font-size:0.72rem;font-weight:700;display:block;margin-bottom:4px">恢复邮箱</label>
+        <input type="email" id="forgot-email" style="width:100%;padding:6px 8px;font-size:0.85rem;border:3px solid var(--black);margin-bottom:14px;box-sizing:border-box">
+        <button onclick="submitForgot()" style="width:100%;padding:8px;background:var(--black);color:var(--white);border:3px solid var(--black);font-size:0.85rem;font-weight:700;cursor:pointer">发送验证码</button>
+      </div>
+      <div id="forgot-step2" style="display:none">
+        <div id="forgot-msg" style="font-size:0.75rem;font-weight:700;margin-bottom:10px"></div>
+        <label style="font-size:0.72rem;font-weight:700;display:block;margin-bottom:4px">验证码</label>
+        <input id="forgot-token" style="width:100%;padding:6px 8px;font-size:0.85rem;border:3px solid var(--black);margin-bottom:12px;box-sizing:border-box">
+        <label style="font-size:0.72rem;font-weight:700;display:block;margin-bottom:4px">新密码</label>
+        <input type="password" id="forgot-password" style="width:100%;padding:6px 8px;font-size:0.85rem;border:3px solid var(--black);margin-bottom:14px;box-sizing:border-box">
+        <button onclick="submitReset()" style="width:100%;padding:8px;background:var(--black);color:var(--white);border:3px solid var(--black);font-size:0.85rem;font-weight:700;cursor:pointer">重置密码</button>
+      </div>
+      <div id="forgot-error" style="color:var(--red);font-weight:700;font-size:0.75rem;min-height:1.2em;margin-top:10px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Change Password Modal -->
+<div id="change-modal" style="display:none;position:fixed;inset:0;z-index:9997;background:rgba(0,0,0,0.5);align-items:center;justify-content:center">
+  <div style="background:var(--white);border:6px solid var(--black);box-shadow:12px 12px 0 var(--shadow-color);width:340px;max-width:90vw">
+    <div style="display:flex;align-items:center;justify-content:space-between;background:var(--black);color:var(--white);padding:10px 16px;font-size:0.9rem;font-weight:700"><span>修改密码</span><button type="button" onclick="closeChangePwModal()" aria-label="关闭修改密码窗口" style="border:0;background:transparent;color:inherit;font:700 1.2rem/1 inherit;cursor:pointer">&times;</button></div>
+    <div style="padding:20px">
+      <label style="font-size:0.72rem;font-weight:700;display:block;margin-bottom:4px">当前密码</label>
+      <input type="password" id="change-old" style="width:100%;padding:6px 8px;font-size:0.85rem;border:3px solid var(--black);margin-bottom:12px;box-sizing:border-box">
+      <label style="font-size:0.72rem;font-weight:700;display:block;margin-bottom:4px">新密码（至少 6 位）</label>
+      <input type="password" id="change-new" style="width:100%;padding:6px 8px;font-size:0.85rem;border:3px solid var(--black);margin-bottom:12px;box-sizing:border-box">
+      <label style="font-size:0.72rem;font-weight:700;display:block;margin-bottom:4px">确认新密码</label>
+      <input type="password" id="change-confirm" style="width:100%;padding:6px 8px;font-size:0.85rem;border:3px solid var(--black);margin-bottom:14px;box-sizing:border-box">
+      <button onclick="submitChangePw()" style="width:100%;padding:8px;background:var(--black);color:var(--white);border:3px solid var(--black);font-size:0.85rem;font-weight:700;cursor:pointer">修改密码</button>
+      <div id="change-error" style="color:var(--red);font-weight:700;font-size:0.75rem;min-height:1.2em;margin-top:10px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Change Recovery Email Modal -->
+<div id="change-email-modal" style="display:none;position:fixed;inset:0;z-index:9996;background:rgba(0,0,0,0.5);align-items:center;justify-content:center">
+    <div style="background:var(--white);border:6px solid var(--black);box-shadow:12px 12px 0 var(--shadow-color);width:340px;max-width:90vw">
+    <div style="display:flex;align-items:center;justify-content:space-between;background:var(--black);color:var(--white);padding:10px 16px;font-size:0.9rem;font-weight:700"><span>修改恢复邮箱</span><button type="button" onclick="closeChangeEmailModal()" aria-label="关闭修改恢复邮箱窗口" style="border:0;background:transparent;color:inherit;font:700 1.2rem/1 inherit;cursor:pointer">&times;</button></div>
+    <div style="padding:20px">
+      <p style="font-size:0.75rem;line-height:1.5;margin:0 0 12px;opacity:0.72">这是安全敏感操作，请先确认当前登录密码；新邮箱仍须通过验证码验证。</p>
+      <label for="ce-password" style="font-size:0.72rem;font-weight:700;display:block;margin-bottom:4px">当前密码</label>
+      <input type="password" id="ce-password" autocomplete="current-password" style="width:100%;padding:6px 8px;font-size:0.85rem;border:3px solid var(--black);margin-bottom:14px;box-sizing:border-box">
+      <div id="ce-step1">
+        <label style="font-size:0.72rem;font-weight:700;display:block;margin-bottom:4px">新恢复邮箱</label>
+        <input type="email" id="ce-email" style="width:100%;padding:6px 8px;font-size:0.85rem;border:3px solid var(--black);margin-bottom:14px;box-sizing:border-box">
+        <button onclick="submitEmailRequest()" style="width:100%;padding:8px;background:var(--black);color:var(--white);border:3px solid var(--black);font-size:0.85rem;font-weight:700;cursor:pointer">发送验证码到新邮箱</button>
+      </div>
+      <div id="ce-step2" style="display:none">
+        <div id="ce-msg" style="font-size:0.75rem;font-weight:700;margin-bottom:10px"></div>
+        <label style="font-size:0.72rem;font-weight:700;display:block;margin-bottom:4px">验证码</label>
+        <input id="ce-token" style="width:100%;padding:6px 8px;font-size:0.85rem;border:3px solid var(--black);margin-bottom:14px;box-sizing:border-box">
+        <button onclick="submitEmailConfirm()" style="width:100%;padding:8px;background:var(--black);color:var(--white);border:3px solid var(--black);font-size:0.85rem;font-weight:700;cursor:pointer">确认更换邮箱</button>
+      </div>
+      <div id="ce-error" style="color:var(--red);font-weight:700;font-size:0.75rem;min-height:1.2em;margin-top:10px"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/edit-mode.js?v=20260824-print-preview-actions"></script>
+<script src="/static/js/attachment-viewer.js?v=20260822-preview-mobile"></script>
+<script src="/static/js/child-agent.js?v=20260825-child-streaming"></script>
+<script src="/static/js/motion.js"></script>
+<script src="/static/js/theme.js"></script>
+<script src="/ai-shell/static/js/sound.js?v=20260824-music-card"></script>
+<script src="/ai-shell/static/js/agent.js?v=20260825-analysis-timeout-setting"></script>
+<script src="/ai-shell/static/js/chat.js?v=20260824-thread-theme-responsive"></script>
+<script src="/ai-shell/static/js/panel.js?v=20260825-canvas-coming-soon"></script>
+
+<script>
+(function() {
+  "use strict";
+
+  // ---- 全局 fetch 拦截：自动注入 token ----
+  (function() {
+    var _orig = window.fetch;
+    window.fetch = function(url, opts) {
+      opts = opts || {};
+      // Shell 同时有 /api/... 与 /experiments/... 两类同源接口。
+      // 不能只给 API 路径带 token，否则手动保存会误写入离线库。
+      if (typeof url === 'string' && url.charAt(0) === '/' && url.slice(0, 2) !== '//') {
+        var token = localStorage.getItem('exdiary_token');
+        if (token) {
+          var headers = new Headers(opts.headers || {});
+          if (!headers.has('Authorization')) headers.set('Authorization', 'Bearer ' + token);
+          opts.headers = headers;
+        }
+      }
+      return _orig.call(window, url, opts);
+    };
+  })();
+
+  // ---- Auth Modal ----
+  var _authMode = 'login'; // 'login' | 'register'
+
+  window.showAuthModal = function() {
+    document.getElementById('auth-modal').style.display = 'flex';
+    document.getElementById('auth-username').focus();
+  };
+  window.showAccountModal = function() {
+    var account = localStorage.getItem('exdiary_account');
+    if (!account) { window.showAuthModal(); return; }
+    document.getElementById('account-modal-name').textContent = account;
+    document.getElementById('account-modal').style.display = 'flex';
+  };
+  window.closeAccountModal = function() { document.getElementById('account-modal').style.display = 'none'; };
+  var _sessionExpiryTimer = null;
+  function clearStoredLogin() {
+    localStorage.removeItem('exdiary_token');
+    localStorage.removeItem('exdiary_account');
+    try { sessionStorage.removeItem('exdiary_agent_state'); } catch (e) {}
+    document.cookie = 'exdiary_token=;path=/;max-age=0;SameSite=Lax';
+    var link = document.getElementById('chat-header-auth');
+    if (link) { link.textContent = '登录/注册'; link.title = ''; link.style.color = ''; }
+  }
+  function tokenExpiryAt(token) {
+    try {
+      var payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      payload += '='.repeat((4 - payload.length % 4) % 4);
+      var data = JSON.parse(decodeURIComponent(Array.prototype.map.call(atob(payload), function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join('')));
+      return Number(data.exp) * 1000 || 0;
+    } catch (e) { return 0; }
+  }
+  function scheduleSessionExpiry(token) {
+    if (_sessionExpiryTimer) clearTimeout(_sessionExpiryTimer);
+    var expiresAt = tokenExpiryAt(token);
+    if (!expiresAt) return;
+    _sessionExpiryTimer = setTimeout(function() {
+      expireStoredSession();
+    }, Math.max(0, expiresAt - Date.now()) + 50);
+  }
+  function expireStoredSession() {
+    if (!localStorage.getItem('exdiary_token')) return;
+    clearStoredLogin();
+    try { sessionStorage.setItem('exdiary_login_expired_notice', '1'); } catch (e) {}
+    location.reload();
+  }
+  window.logoutAccount = function() {
+    closeAccountModal();
+    fetch('/api/e2ee/logout', {method: 'POST'}).catch(function() {}).finally(function() {
+      clearStoredLogin();
+      location.reload();
+    });
+  };
+  async function verifyStoredSession() {
+    var token = localStorage.getItem('exdiary_token');
+    var account = localStorage.getItem('exdiary_account');
+    if (!token) {
+      return {valid: false, expired: !!account};
+    }
+    try {
+      var response = await fetch('/api/e2ee/me');
+      var data = await response.json().catch(function() { return {}; });
+      if (response.ok && data.ok && data.account) {
+        localStorage.setItem('exdiary_account', data.account);
+        var link = document.getElementById('chat-header-auth');
+        if (link) { link.textContent = data.account; link.title = '已登录'; }
+        scheduleSessionExpiry(token);
+        return {valid: true, expired: false};
+      }
+      if (response.status === 401) {
+        return {valid: false, expired: true};
+      }
+    } catch (e) {}
+    return {valid: false, expired: false};
+  }
+  function revalidateStoredSession() {
+    if (!localStorage.getItem('exdiary_token')) return;
+    verifyStoredSession().then(function(session) {
+      if (session.expired) expireStoredSession();
+    });
+  }
+  window.addEventListener('focus', revalidateStoredSession);
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) revalidateStoredSession();
+  });
+  window.closeAuthModal = function() {
+    document.getElementById('auth-modal').style.display = 'none';
+    document.getElementById('auth-error').style.display = 'none';
+    document.getElementById('auth-form').reset();
+  };
+  window.toggleAuthMode = function() {
+    _authMode = _authMode === 'login' ? 'register' : 'login';
+    var reg = _authMode === 'register';
+    document.getElementById('auth-modal-title').textContent = reg ? '注册' : '登录';
+    document.getElementById('auth-submit-btn').textContent = reg ? 'REGISTER' : 'LOGIN';
+    document.getElementById('auth-toggle-text').textContent = reg ? '已有账号？' : '没有账号？';
+    document.getElementById('auth-toggle-link').textContent = reg ? '登录' : '注册';
+    document.getElementById('auth-email-wrap').style.display = reg ? 'block' : 'none';
+    document.getElementById('auth-error').style.display = 'none';
+  };
+  window.handleAuth = function(e) {
+    e.preventDefault();
+    var username = document.getElementById('auth-username').value.trim();
+    var password = document.getElementById('auth-password').value;
+    var email = document.getElementById('auth-email').value.trim();
+    var errEl = document.getElementById('auth-error');
+    if (!username || !password) { errEl.textContent = '请填写完整'; errEl.style.display = 'block'; return; }
+    if (_authMode === 'register' && email.indexOf('@') < 0) { errEl.textContent = '请填写有效恢复邮箱'; errEl.style.display = 'block'; return; }
+    var path = _authMode === 'login' ? 'login' : 'register';
+    var body = _authMode === 'login'
+      ? {account: username, password: password}
+      : {account: username, email: email, password: password};
+    fetch('/api/e2ee/' + path, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    }).then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
+        if (_authMode === 'register') {
+          errEl.style.color = 'var(--ok-green)';
+          errEl.textContent = data.notice || '注册成功，请登录';
+          errEl.style.display = 'block';
+          toggleAuthMode();  // 切回登录，让用户登录
+          return;
+        }
+        if (data.token) {
+          localStorage.setItem('exdiary_token', data.token);
+          localStorage.setItem('exdiary_account', data.account || username);
+          document.cookie = 'exdiary_token=' + encodeURIComponent(data.token) + ';path=/;max-age=86400;SameSite=Lax';
+        }
+        // 登录后清除旧的 agent 状态，确保重新从后端加载
+        try { sessionStorage.removeItem('exdiary_agent_state'); } catch(e) {}
+        closeAuthModal();
+        location.reload();
+      }).catch(function() { errEl.textContent = '网络错误'; errEl.style.display = 'block'; });
+  };
+
+  // 已登录时顶栏显示账号；账户操作收进账号菜单。
+  (function() {
+    var acc = localStorage.getItem('exdiary_account');
+    var link = document.getElementById('chat-header-auth');
+    if (acc && link) { link.textContent = acc; link.title = '已登录'; }
+  })();
+
+  // ---- 忘记密码 ----
+  window.showForgot = function() {
+    var m = document.getElementById('forgot-modal');
+    document.getElementById('forgot-step1').style.display = 'block';
+    document.getElementById('forgot-step2').style.display = 'none';
+    document.getElementById('forgot-error').textContent = '';
+    m.style.display = 'flex';
+  };
+  function setForgotMsg(txt) {
+    var el = document.getElementById('forgot-error');
+    el.style.color = txt ? 'var(--red)' : 'var(--ok-green)';
+    el.textContent = txt || '';
+  }
+  window.submitForgot = function() {
+    setForgotMsg('');
+    fetch('/api/e2ee/forgot', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({account: document.getElementById('forgot-account').value.trim(),
+        email: document.getElementById('forgot-email').value.trim()})})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.ok) {
+          document.getElementById('forgot-msg').textContent = (d.notice || '已发送') + (d.token ? '\n验证码：' + d.token : '');
+          document.getElementById('forgot-step1').style.display = 'none';
+          document.getElementById('forgot-step2').style.display = 'block';
+        } else { setForgotMsg(d.error || '发送失败'); }
+      });
+  };
+  window.submitReset = function() {
+    setForgotMsg('');
+    var account = document.getElementById('forgot-account').value.trim();
+    fetch('/api/e2ee/reset', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({account: account,
+        token: document.getElementById('forgot-token').value.trim(),
+        new_password: document.getElementById('forgot-password').value})})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.ok) { setForgotMsg(d.notice || '已重置，请用新密码登录'); setTimeout(function(){ document.getElementById('forgot-modal').style.display='none'; }, 1800); }
+        else { setForgotMsg(d.error || '重置失败'); }
+      });
+  };
+
+  // ---- 修改密码 ----
+  var _chgSel = { old: 'change-old', n1: 'change-new', n2: 'change-confirm' };
+  window.showChangePwModal = function() {
+    document.getElementById(_chgSel.old).value='';
+    document.getElementById(_chgSel.n1).value='';
+    document.getElementById(_chgSel.n2).value='';
+    document.getElementById('change-error').textContent='';
+    document.getElementById('change-modal').style.display='flex';
+    if (document.getElementById('change-old')) document.getElementById('change-old').focus();
+  };
+  window.closeChangePwModal = function() { document.getElementById('change-modal').style.display='none'; };
+  window.submitChangePw = function() {
+    var err = document.getElementById('change-error');
+    var oldp = document.getElementById(_chgSel.old).value;
+    var n1 = document.getElementById(_chgSel.n1).value;
+    var n2 = document.getElementById(_chgSel.n2).value;
+    if (n1 !== n2) { err.style.color='var(--red)'; err.textContent='两次新密码不一致'; return; }
+    var account = localStorage.getItem('exdiary_account');
+    fetch('/api/e2ee/change-password', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({account: account, old_password: oldp, new_password: n1})})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.ok) {
+          err.style.color='var(--ok-green)'; err.textContent = d.notice || '密码已修改';
+          clearStoredLogin();
+          setTimeout(function(){ location.reload(); }, 1800);
+        } else { err.style.color='var(--red)'; err.textContent = d.error || '修改失败'; }
+      });
+  };
+
+  // ---- 修改恢复邮箱 ----
+  function setCeMsg(txt) {
+    var el = document.getElementById('ce-error');
+    el.style.color = txt ? 'var(--red)' : 'var(--ok-green)';
+    el.textContent = txt || '';
+  }
+  window.showChangeEmailModal = function() {
+    document.getElementById('ce-email').value='';
+    document.getElementById('ce-token').value='';
+    document.getElementById('ce-password').value='';
+    setCeMsg('');
+    document.getElementById('ce-step1').style.display='block';
+    document.getElementById('ce-step2').style.display='none';
+    document.getElementById('change-email-modal').style.display='flex';
+  };
+  window.closeChangeEmailModal = function() { document.getElementById('change-email-modal').style.display='none'; };
+  window.submitEmailRequest = function() {
+    setCeMsg('');
+    var account = localStorage.getItem('exdiary_account');
+    fetch('/api/e2ee/change-email-request', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({account: account, password: document.getElementById('ce-password').value, new_email: document.getElementById('ce-email').value.trim()})})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.ok) {
+          document.getElementById('ce-msg').textContent = (d.notice || '已发送') + (d.token ? '\n验证码：' + d.token : '');
+          document.getElementById('ce-step1').style.display='none';
+          document.getElementById('ce-step2').style.display='block';
+        } else { setCeMsg(d.error || '发送失败'); }
+      });
+  };
+  window.submitEmailConfirm = function() {
+    setCeMsg('');
+    var account = localStorage.getItem('exdiary_account');
+    fetch('/api/e2ee/change-email-confirm', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({account: account, password: document.getElementById('ce-password').value, token: document.getElementById('ce-token').value.trim()})})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.ok) {
+          setCeMsg(d.notice || '恢复邮箱已更新');
+          setTimeout(function(){ document.getElementById('change-email-modal').style.display='none'; }, 1800);
+        } else { setCeMsg(d.error || '验证失败'); }
+      });
+  };
+
+  ['change-modal', 'change-email-modal'].forEach(function(id) {
+    document.getElementById(id).addEventListener('click', function(event) {
+      if (event.target === this) this.style.display = 'none';
+    });
+  });
+
+  // ---- Wiring ----
+
+  PanelManager.init();
+  ChatUI.init();
+
+  AgentClient.init({
+    onMessage:     ChatUI.onMessage,
+    onStreamStart: ChatUI.onStreamStart,
+    onStreamChunk: ChatUI.onStreamChunk,
+    onStreamEnd:   ChatUI.onStreamEnd,
+    onToolCard:    ChatUI.onToolCard,
+    onError:       ChatUI.onError,
+    onIdle:        ChatUI.onIdle,
+    onStateChange: function(state) {
+      ChatUI.updateModeBadge(AgentClient.getMode());
+      ChatUI.updateThreadColor(state);
+    }
+  });
+
+  var _sessionNotice = '';
+  var _showExpiredLogin = false;
+  try {
+    _showExpiredLogin = sessionStorage.getItem('exdiary_login_expired_notice') === '1';
+    sessionStorage.removeItem('exdiary_login_expired_notice');
+  } catch (e) {}
+  verifyStoredSession().then(function(session) {
+    if (session.expired) {
+      clearStoredLogin();
+      _showExpiredLogin = true;
+    }
+    if (_showExpiredLogin) _sessionNotice = '登录已过期，请重新登录。当前使用离线数据。';
+    return AgentClient.start();
+  }).then(function(ok) {
+    if (_sessionNotice) {
+      var status = document.getElementById('status-bar');
+      if (status) status.textContent = _sessionNotice;
+      if (ChatUI.showToast) ChatUI.showToast(_sessionNotice);
+      window.showAuthModal();
+      var authError = document.getElementById('auth-error');
+      if (authError) {
+        authError.textContent = '登录已过期，请重新登录。';
+        authError.style.display = 'block';
+      }
+    }
+    if (!ok) {
+      var container = document.getElementById("chat-messages");
+      if (container) {
+        var empty = container.querySelector(".chat-empty");
+        if (empty) {
+          empty.innerHTML = '<h2>Not Connected</h2><p>Configure your DeepSeek API key in <a href="/settings">Settings</a> to get started.</p>';
+        }
+      }
+    }
+  });
+
+  // ---- 全局导航函数（供片段内 onclick 调用） ----
+  window.navigateToPage = function(url) {
+    PanelManager.navigate(url);
+  };
+
+  // ---- 路由初始化：根据当前 URL 加载对应片段 ----
+  var path = window.location.pathname;
+  if (path !== "/" && path !== "/ai-shell/" && path !== "/ai-shell") {
+    PanelManager.navigate(path + window.location.search);
+  }
+
+  // ---- Color Divider Animation ----
+  var _cdTimer = null;
+  var _cdSpans = null;
+
+  window.startColorDivider = function() {
+    if (_cdTimer) return;
+    _cdSpans = document.querySelectorAll("#color-divider span");
+    if (!_cdSpans.length) return;
+    _animateCd();
+  };
+
+  function _animateCd() {
+    var parts = [
+      Math.random() * 70 + 8,
+      Math.random() * 70 + 8,
+      Math.random() * 70 + 8,
+      Math.random() * 70 + 8
+    ];
+    var total = parts.reduce(function(a,b){return a+b;}, 0);
+    _cdSpans.forEach(function(s, i) {
+      s.style.flexGrow = (parts[i] / total * 10).toFixed(2);
+    });
+    _cdTimer = setTimeout(_animateCd, 800 + Math.random() * 600);
+  }
+
+  window.stopColorDivider = function() {
+    clearTimeout(_cdTimer);
+    _cdTimer = null;
+    if (_cdSpans) {
+      _cdSpans.forEach(function(s) { s.style.flexGrow = "1"; });
+      _cdSpans = null;
+    }
+  };
+
+})();
+</script>
+
+</body>
+</html>

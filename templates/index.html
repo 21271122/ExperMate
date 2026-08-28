@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}仪表盘{% endblock %}
+{% block page_id %}dashboard{% endblock %}
+
+{% block topbar %}{% endblock %}
+{% block footer %}{% endblock %}
+
+{% block main_wrapper %}
+<main style="max-width:none;padding:0;margin:0">
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body, html { width: 100vw; height: 100vh; overflow: hidden; background: #f0f0f0; }
+
+  #stage {
+    position: fixed; inset: 0;
+    display: flex; justify-content: center; align-items: center;
+    background: #f0f0f0;
+    font-family: 'Helvetica Neue', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', Arial, sans-serif;
+  }
+
+  #stage-inner {
+    position: relative;
+    width: 100%; max-width: 600px;
+    aspect-ratio: 1 / 3;
+    max-height: 100vh;
+    flex-shrink: 0;
+    background: #000;
+    border: 3px solid #000;
+    overflow: hidden;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+  }
+
+  #de-stijl-canvas {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+    cursor: pointer; z-index: 1;
+  }
+
+  /* ---- Settings button ---- */
+  #btn-settings {
+    position: fixed; bottom: 1rem; left: 1rem; z-index: 50;
+    width: 36px; height: 36px;
+    background: var(--white); color: var(--black);
+    border: 3px solid var(--black);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; font-weight: 700;
+    cursor: pointer; text-decoration: none;
+    transition: background 0.15s;
+  }
+  #btn-settings:hover { background: var(--black); color: var(--white); }
+
+  /* ---- Experiment count ---- */
+  #exp-count {
+    position: fixed; top: 1rem; left: 1rem; z-index: 50;
+    font-size: 0.65rem; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    color: #fff; mix-blend-mode: difference;
+    pointer-events: none; opacity: 0.7;
+  }
+
+  @media (max-width: 600px) {
+    #stage-inner { border-width: 2px; }
+  }
+</style>
+
+<div id="stage">
+  <div id="stage-inner">
+    <canvas id="de-stijl-canvas"></canvas>
+  </div>
+
+  <div id="exp-count">{{ experiments|length }} Records</div>
+  <a href="/settings" id="btn-settings" title="Settings" draggable="false">&#x2699;</a>
+</div>
+
+<script src="/static/js/dashboard.js"></script>
+
+</main>
+{% endblock %}
+{% block content %}{% endblock %}

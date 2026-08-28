@@ -1,0 +1,304 @@
+{% extends "base.html" %}
+{% block title %}分类{% endblock %}
+{% block page_id %}favorites{% endblock %}
+{% block page_bg %}background-color: var(--page-bg-yellow);{% endblock %}
+{% block topbar_style %}
+.topbar { background: var(--yellow); }
+.topbar-back { background: var(--white); color: var(--black); border-color: var(--white); }
+.topbar-back:hover { background: var(--yellow); color: var(--white); }
+{% endblock %}
+{% block content %}
+
+<div class="desktop-only">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:0.5rem;margin-bottom:1.5rem">
+    <div>
+      <h1 style="margin:0;border-bottom:none;padding-bottom:0">Categories</h1>
+      <span style="font-size:0.8rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;opacity:0.5" id="total-count">0 Records</span>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:0.4rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center" id="collection-tabs">
+    {% for name, ids in collections.items() %}
+    <span class="filter-chip {% if loop.first %}active{% endif %}" data-collection="{{ name }}" onclick="switchCollection('{{ name }}')">
+      {{ name }} ({{ ids|length }})
+    </span>
+    {% endfor %}
+    <button class="outline" style="font-size:0.7rem;padding:0.25rem 0.6rem" onclick="showNewCollection()">+ New</button>
+  </div>
+
+  <div style="margin-bottom:1rem">
+    <input type="search" id="fav-search" placeholder="Search categories..." autocomplete="off" style="font-size:0.9rem">
+  </div>
+</div>
+
+<div id="favorites-list">
+  <div style="text-align:center;padding:1rem;opacity:0.5">Loading...</div>
+</div>
+
+<style>
+/* ---- 实验记录卡片（与 experiments.html 一致） ---- */
+
+.record-card {
+  background: var(--white);
+  border: 4px solid var(--black);
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  margin-bottom: 0.8rem;
+  position: relative;
+}
+.record-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0px var(--card-shadow);
+}
+
+.card-header {
+  display: flex;
+  border-bottom: 4px solid var(--black);
+  height: 28px;
+}
+.header-exp {
+  flex: 1;
+  background: var(--blue);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  padding-left: 10px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  position: relative;
+}
+.header-status {
+  width: 70px;
+  background: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  border-left: 4px solid var(--black);
+}
+.header-status.s-done    { color: var(--badge-done-fg); }
+.header-status.s-planned { color: var(--badge-planned-fg); }
+.header-status.s-running { color: var(--badge-running-fg); }
+.header-status.s-failed  { color: var(--badge-failed-fg); }
+.header-status.s-repeated { color: var(--badge-repeated-fg); }
+
+.card-body { display: flex; flex: 1; }
+
+.main-content {
+  flex: 1;
+  position: relative;
+  padding: 14px 14px 12px 14px;
+  display: flex;
+  flex-direction: column;
+}
+.black-overhang {
+  position: absolute;
+  top: 0; right: 0;
+  width: 45px; height: 10px;
+  background: var(--black);
+}
+.content-title {
+  text-align: left;
+  font-size: 0.95rem;
+  font-weight: 900;
+  color: var(--black);
+  line-height: 1.3;
+  margin-bottom: 0.5rem;
+}
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: auto;
+}
+.tag {
+  border: 1px solid var(--blue);
+  color: var(--text-3);
+  padding: 1px 6px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sidebar {
+  width: 85px;
+  border-left: 4px solid var(--black);
+  display: flex;
+  flex-direction: column;
+  align-self: flex-start;
+}
+.date-block {
+  padding: 5px 7px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--black);
+  border-bottom: 4px solid var(--black);
+  background: var(--yellow);
+}
+.date-block.end-date { text-align: right; }
+.person-box {
+  background: var(--white);
+  display: flex;
+  height: 30px;
+  flex-shrink: 0;
+  border-bottom: 4px solid var(--black);
+}
+.person-accent {
+  width: 8px;
+  background: var(--red);
+  border-right: 2px solid var(--black);
+}
+.person-name {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--black);
+  letter-spacing: 0.5px;
+}
+
+/* 移除按钮 */
+.fav-remove-btn {
+  position: absolute;
+  bottom: 6px; right: 6px;
+  font-size: 0.6rem; font-weight: 700;
+  cursor: pointer; background: none;
+  border: 1.5px solid var(--black);
+  padding: 1px 5px; z-index: 10;
+  opacity: 0.4;
+}
+.fav-remove-btn:hover { opacity: 1; background: var(--red); color: var(--white); }
+</style>
+
+<script>
+window.savePageState = function() { return {scrollY: window.scrollY}; };
+window.restorePageState = function(state) { if (state && state.scrollY !== undefined) window.scrollTo(0, state.scrollY); };
+
+var _currentCollection = '{{ collections.keys()|list|first|default("Default") }}';
+var _allExperiments = [];
+var _collections = {{ collections | tojson | safe }};
+
+fetch('/api/experiments/search')
+  .then(function(r) { return r.json(); })
+  .then(function(data) { _allExperiments = data; switchCollection(_currentCollection); });
+
+function switchCollection(name) {
+  _currentCollection = name;
+  document.querySelectorAll('.filter-chip[data-collection]').forEach(function(chip) {
+    chip.classList.toggle('active', chip.dataset.collection === name);
+  });
+  renderFavorites();
+}
+
+function _statusLabel(s) {
+  if (s === 'done') return 'DONE';
+  if (s === 'running') return 'RUN';
+  if (s === 'failed') return 'FAIL';
+  if (s === 'repeated') return 'RPT';
+  return 'PLAN';
+}
+
+function renderFavorites() {
+  var ids = _collections[_currentCollection] || [];
+  var container = document.getElementById('favorites-list');
+  var query = document.getElementById('fav-search').value.trim().toLowerCase();
+  document.getElementById('total-count').textContent = ids.length + ' Items';
+
+  var exps = ids.map(function(id) {
+    for (var i = 0; i < _allExperiments.length; i++) { if (_allExperiments[i].id === id) return _allExperiments[i]; }
+    return null;
+  }).filter(function(e) { return e !== null; });
+
+  if (query) {
+    exps = exps.filter(function(exp) {
+      return [exp.title, exp.purpose, exp.conclusion, (exp.tags||[]).join(' ')].join(' ').toLowerCase().indexOf(query) !== -1;
+    });
+  }
+
+  if (exps.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>' + (ids.length === 0 ? 'This collection is empty' : 'No matches') + '</p></div>';
+    return;
+  }
+
+  var html = '';
+  exps.forEach(function(exp) {
+    var s = exp.status || 'planned';
+    html += '<article class="record-card" data-exp-id="' + escHtml(exp.id) + '" data-status="' + escHtml(s) + '" onclick="event.target.closest(\'.fav-remove-btn\') || navigateToPage(\'/experiments/' + escHtml(exp.id) + '\')">';
+    html += '<div class="card-header">';
+    html += '<div class="header-exp">' + escHtml(exp.id) + '</div>';
+    html += '<div class="header-status s-' + escHtml(s) + '">' + _statusLabel(s) + '</div>';
+    html += '</div>';
+    html += '<div class="card-body">';
+    html += '<div class="main-content">';
+    html += '<div class="black-overhang"></div>';
+    html += '<div class="content-title">' + escHtml(exp.title || '(untitled)') + '</div>';
+    if (exp.tags && exp.tags.length) {
+      html += '<div class="tags-container">';
+      exp.tags.forEach(function(tag) { html += '<div class="tag">' + escHtml(tag) + '</div>'; });
+      html += '</div>';
+    }
+    html += '</div>';
+    html += '<div class="sidebar">';
+    html += '<div class="date-block">' + escHtml(exp.date || '—') + '</div>';
+    html += '<div class="person-box"><div class="person-accent"></div><div class="person-name">' + escHtml(exp.experimenter || '—') + '</div></div>';
+    html += '<div class="date-block end-date">' + escHtml(exp.end_date || exp.date || '—') + '</div>';
+    html += '</div>';
+    html += '</div>';
+    html += '<button class="fav-remove-btn" onclick="removeFromCollection(\'' + escHtml(exp.id) + '\')">X</button>';
+    html += '</article>';
+  });
+  container.innerHTML = html;
+}
+
+function removeFromCollection(expId) {
+  fetch('/api/experiments/' + expId + '/favorite', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({collection: _currentCollection})
+  }).then(function(r) { return r.json(); })
+    .then(function(r) {
+      if (r.ok) {
+        _collections[_currentCollection] = (_collections[_currentCollection]||[]).filter(function(id) { return id !== expId; });
+        var tab = document.querySelector('.filter-chip[data-collection="' + _currentCollection + '"]');
+        if (tab) tab.textContent = _currentCollection + ' (' + _collections[_currentCollection].length + ')';
+        renderFavorites();
+      }
+    });
+}
+
+function showNewCollection() {
+  var name = prompt('New collection name:');
+  if (!name || !name.trim()) return;
+  name = name.trim();
+  fetch('/api/collections', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name: name})
+  }).then(function(r) { return r.json(); })
+    .then(function(r) {
+      if (r.ok) {
+        _collections[name] = [];
+        var tabs = document.getElementById('collection-tabs');
+        var chip = document.createElement('span');
+        chip.className = 'filter-chip'; chip.dataset.collection = name;
+        chip.textContent = name + ' (0)';
+        chip.onclick = function() { switchCollection(name); };
+        tabs.insertBefore(chip, tabs.lastElementChild);
+        switchCollection(name);
+      } else alert(r.error || 'Failed');
+    });
+}
+
+function escHtml(s) { var d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+document.getElementById('fav-search').addEventListener('input', renderFavorites);
+</script>
+
+{% endblock %}

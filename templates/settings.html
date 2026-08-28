@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}设置{% endblock %}
+{% block page_id %}settings{% endblock %}
+{% block content %}
+
+<style>
+/* 设置页遵循“标题/操作用微软雅黑，说明/内容用仿宋”的全站中文层级。 */
+.settings-content { font-family:var(--font-reading, "FangSong", "FangSong_GB2312", "STFangsong", serif); }
+.settings-content h1, .settings-content h2, .settings-content h3,
+.settings-content label > strong, .settings-content button,
+.settings-content .settings-kicker { font-family:var(--font-ui, "Microsoft YaHei", "PingFang SC", sans-serif); }
+.settings-content input, .settings-content select, .settings-content small,
+.settings-content .flash { font-family:var(--font-reading, "FangSong", "FangSong_GB2312", "STFangsong", serif); }
+.settings-content input.settings-code-input { font-family:var(--font-code, "Cascadia Mono", Consolas, monospace); }
+</style>
+
+<section class="settings-content">
+<h1 style="border-bottom:none;padding-bottom:0">设置</h1>
+<p class="settings-kicker" style="font-weight:700;font-size:0.8rem;opacity:0.5;letter-spacing:1px">配置模型、兼容接口与服务</p>
+
+{% if success %}
+<div class="flash flash-success" style="border-left:8px solid var(--black)">{{ success }}</div>
+{% endif %}
+{% if error %}
+<div class="flash flash-error" style="border-left:8px solid var(--black)">{{ error }}</div>
+{% endif %}
+
+<form method="post" action="/settings" style="margin-top:1.5rem"
+      onsubmit="if(document.getElementById('fragment-mount')){event.preventDefault();submitSettingsForm(this);return false;}">
+
+  <h3 style="margin:1.2rem 0 0.3rem">助手与结构化提取模型</h3>
+  <small style="font-weight:500;opacity:0.65">必须选择支持 Function Calling 的模型；同一模型也用于把自然语言整理为实验记录。</small>
+
+  <label style="margin-top:0.8rem"><strong>模型服务商</strong></label>
+  <select id="agent-provider" name="LLM_AGENT_PROVIDER" data-base-target="agent-base-url">
+    {% for provider in providers %}
+    <option value="{{ provider.id }}" {% if (config.LLM_AGENT_PROVIDER or 'deepseek') == provider.id %}selected{% endif %}>{{ provider.label }}</option>
+    {% endfor %}
+  </select>
+
+  <label style="margin-top:0.8rem"><strong>API 密钥</strong></label>
+  <input type="password" name="LLM_AGENT_API_KEY" autocomplete="off"
+    placeholder="{% if masked_agent_key %}已保存：{{ masked_agent_key }}（留空不修改）{% else %}输入所选服务的 API Key{% endif %}"
+    class="settings-code-input">
+
+  <label style="margin-top:0.8rem"><strong>Base URL（可选）</strong><small style="font-weight:500;opacity:0.6">留空使用所选厂商的官方 OpenAI 兼容地址；自定义服务必须填写。</small></label>
+  <input type="url" id="agent-base-url" name="LLM_AGENT_BASE_URL" value="{{ config.LLM_AGENT_BASE_URL }}" placeholder="由 Provider 自动使用官方地址">
+
+  <label style="margin-top:0.8rem"><strong>模型名称</strong></label>
+  <input type="text" name="LLM_AGENT_MODEL" value="{{ config.LLM_AGENT_MODEL or config.DEEPSEEK_MODEL }}" placeholder="例如 deepseek-chat、qwen-plus、glm-5.3">
+
+  <label for="llm-reasoning-effort" style="margin-top:0.8rem"><strong>思考强度</strong></label>
+  <select id="llm-reasoning-effort" name="LLM_REASONING_EFFORT">
+    <option value="low" {% if config.LLM_REASONING_EFFORT == 'low' %}selected{% endif %}>低 · 更快</option>
+    <option value="medium" {% if config.LLM_REASONING_EFFORT == 'medium' %}selected{% endif %}>中 · 平衡</option>
+    <option value="high" {% if config.LLM_REASONING_EFFORT == 'high' %}selected{% endif %}>高 · 更充分</option>
+    <option value="max" {% if not config.LLM_REASONING_EFFORT or config.LLM_REASONING_EFFORT == 'max' %}selected{% endif %}>最高 · 当前默认</option>
+  </select>
+  <small style="font-weight:500;opacity:0.6">作用于助手、子 Agent 和分析报告生成。仅支持该参数的模型服务会收到此设置；其他服务保持原有调用方式。</small>
+
+  <h3 style="margin:1.4rem 0 0.3rem">主聊天会话整理</h3>
+  <small style="font-weight:500;opacity:0.65">只作用于主 Agent 当前会话。到达阈值后，将较早原文整理为摘要；完整原文仍保存在聊天记录中，可继续翻阅。</small>
+  <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:0.8rem">
+    <div style="flex:1;min-width:180px">
+      <label for="compression-trigger"><strong>触发阈值</strong></label>
+      <input id="compression-trigger" type="number" name="CONTEXT_COMPRESSION_TRIGGER_TOKENS" min="10000" max="1000000" step="1000" value="{{ config.CONTEXT_COMPRESSION_TRIGGER_TOKENS or 300000 }}">
+    </div>
+    <div style="flex:1;min-width:180px">
+      <label for="compression-chunk"><strong>每次整理量</strong></label>
+      <input id="compression-chunk" type="number" name="CONTEXT_COMPRESSION_CHUNK_TOKENS" min="1000" max="990000" step="1000" value="{{ config.CONTEXT_COMPRESSION_CHUNK_TOKENS or 260000 }}">
+    </div>
+  </div>
+  <small style="font-weight:500;opacity:0.6">单位均为 token。默认 300,000 / 260,000，整理后通常保留最近约 40,000 token 的完整消息；工具调用会按完整组保留，因此会有少量偏差。</small>
+
+  <h3 style="margin:1.4rem 0 0.3rem">分析模型 <small style="font-weight:500;opacity:0.55">可选</small></h3>
+  <small style="font-weight:500;opacity:0.65">留空则完全继承 Agent 配置；可单独设置为更适合长文推理的模型。</small>
+
+  <label style="margin-top:0.8rem"><strong>模型服务商</strong></label>
+  <select id="analyze-provider" name="LLM_ANALYZE_PROVIDER" data-base-target="analyze-base-url">
+    <option value="" {% if not config.LLM_ANALYZE_PROVIDER %}selected{% endif %}>继承 Agent 配置</option>
+    {% for provider in providers %}
+    <option value="{{ provider.id }}" {% if config.LLM_ANALYZE_PROVIDER == provider.id %}selected{% endif %}>{{ provider.label }}</option>
+    {% endfor %}
+  </select>
+
+  <label style="margin-top:0.8rem"><strong>API 密钥（可选）</strong></label>
+  <input type="password" name="LLM_ANALYZE_API_KEY" autocomplete="off"
+    placeholder="{% if masked_analyze_key %}已保存：{{ masked_analyze_key }}（留空不修改）{% else %}留空继承 Agent API Key{% endif %}"
+    class="settings-code-input">
+
+  <label style="margin-top:0.8rem"><strong>Base URL（可选）</strong></label>
+  <input type="url" id="analyze-base-url" name="LLM_ANALYZE_BASE_URL" value="{{ config.LLM_ANALYZE_BASE_URL }}" placeholder="留空继承 Agent Base URL">
+
+  <label style="margin-top:0.8rem"><strong>模型名称（可选）</strong></label>
+  <input type="text" name="LLM_ANALYZE_MODEL" value="{{ config.LLM_ANALYZE_MODEL or config.DEEPSEEK_ANALYZE_MODEL }}" placeholder="留空继承 Agent Model">
+
+  <label style="margin-top:0.8rem"><strong>分析任务总时限</strong></label>
+  <input type="number" name="ANALYSIS_TIMEOUT_MINUTES" min="1" max="30" step="1"
+    value="{{ (config.ANALYSIS_TIMEOUT_SECONDS or 480) // 60 }}">
+  <small style="font-weight:500;opacity:0.6">单位：分钟。到达上限会直接返回，不自动重试。</small>
+
+  <p style="font-size:0.75rem;line-height:1.5;opacity:0.65;margin:0.9rem 0 0">已内置 DeepSeek、千问、GLM、Kimi、MiniMax、百度 AI Studio/千帆、火山方舟预设；也可填写任意 OpenAI Chat Completions 兼容地址。厂商侧仍须确认所选 Agent 模型支持 Function Calling。</p>
+
+  <hr style="border:3px solid var(--black);margin:1.5rem 0">
+
+  <div style="display:flex;gap:1rem;flex-wrap:wrap">
+    <div style="flex:1;min-width:120px">
+      <label><strong>端口</strong></label>
+      <input type="number" id="port" name="PORT" value="{{ config.PORT or '5000' }}" min="1024" max="65535">
+    </div>
+    <div style="flex:2;min-width:180px">
+      <label><strong>主机地址</strong></label>
+      <input type="text" id="host" name="HOST" value="{{ config.HOST or '0.0.0.0' }}">
+    </div>
+  </div>
+
+  <label style="margin-top:1rem;display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+    <input type="checkbox" name="GUI" value="true" {% if config.GUI and config.GUI != 'false' %}checked{% endif %} style="width:auto">
+    <span><strong>启动时打开桌面窗口</strong><br><small style="font-weight:500;opacity:0.6">需要 pywebview；未安装时会以浏览器模式打开。</small></span>
+  </label>
+
+  <p style="font-weight:700;font-size:0.75rem;opacity:0.5;margin-top:0.5rem;letter-spacing:0.5px">
+    修改端口或主机地址后需要重启。
+  </p>
+
+  <label style="margin-top:1rem"><strong>外观</strong></label>
+  <div id="theme-options" style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:1rem">
+    <button type="button" class="filter-chip" data-pref="system">跟随系统</button>
+    <button type="button" class="filter-chip" data-pref="light">浅色</button>
+    <button type="button" class="filter-chip" data-pref="dark">深色</button>
+  </div>
+
+  <section style="margin-top:1.3rem;padding-top:1rem;border-top:3px solid var(--black)">
+    <h3 style="margin:0 0 0.3rem">声音</h3>
+    <small style="font-weight:500;opacity:0.65">声音偏好仅保存在这台设备。背景音乐默认关闭；播放结束后会随机切换下一首。</small>
+    <label style="margin-top:0.8rem;display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input id="sound-sfx" type="checkbox" style="width:auto"><span><strong>操作音效</strong><br><small style="font-weight:500;opacity:0.6">发送、回复完成、保存、跳转与错误提示。</small></span></label>
+    <label style="margin-top:0.5rem;display:block"><strong>音效音量</strong><input id="sound-sfx-volume" type="range" min="0" max="100" style="display:block;width:100%;accent-color:var(--blue)"></label>
+    <label style="margin-top:0.9rem;display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input id="sound-bgm" type="checkbox" style="width:auto"><span><strong>古典背景音乐</strong><br><small style="font-weight:500;opacity:0.6">当前曲库共 30 首；可手动切换当前曲目。</small></span></label>
+    <label style="margin-top:0.5rem;display:block"><strong>背景音乐音量</strong><input id="sound-bgm-volume" type="range" min="0" max="30" style="display:block;width:100%;accent-color:var(--blue)"></label>
+    <label for="sound-bgm-track" style="margin-top:0.8rem;display:block"><strong>播放曲目</strong><select id="sound-bgm-track" style="margin-top:0.35rem"></select><small style="display:block;font-weight:500;opacity:0.6;margin-top:0.3rem">选择一首会立即切换；播放结束后仍随机播放下一首。</small></label>
+  </section>
+
+  <button type="submit" style="min-width:140px;margin-top:1rem">保存设置</button>
+</form>
+</section>
+
+<script>
+/* SPA fragment 注入后刷新主题 chips 高亮（click 由 theme.js 的 document 委托处理） */
+if (window.ExdiaryTheme) ExdiaryTheme.refreshUI();
+if (window.ExdiarySound) ExdiarySound.bindSettings(document);
+(function () {
+  var defaults = {{ providers | tojson }};
+  var lookup = {};
+  defaults.forEach(function (provider) { lookup[provider.id] = provider.base_url; });
+  document.querySelectorAll("select[data-base-target]").forEach(function (select) {
+    select.addEventListener("change", function () {
+      var target = document.getElementById(select.dataset.baseTarget);
+      if (!target || target.value) return;
+      target.placeholder = lookup[select.value] || (select.value ? "由 Provider 自动使用官方地址" : "留空继承 Agent Base URL");
+    });
+  });
+})();
+function submitSettingsForm(form) {
+  var fd = new FormData(form);
+  fetch('/settings?fragment=1', {method:'POST', body:fd, headers:{'X-Fragment':'1'}})
+    .then(function(r){return r.text();})
+    .then(function(html){
+      var mount = document.getElementById('fragment-mount');
+      if (mount) {
+        // 与 PanelManager 导航保持同一层级，否则设置页保存后会丢失内容限宽和内边距。
+        mount.innerHTML = '<div class="fragment-content">' + html + '</div>';
+        mount.scrollTop = 0;
+        // innerHTML 不会执行片段内脚本；重新插入以恢复主题按钮与 Provider 交互。
+        mount.querySelectorAll('script').forEach(function(oldScript) {
+          var newScript = document.createElement('script');
+          newScript.textContent = oldScript.textContent;
+          oldScript.replaceWith(newScript);
+        });
+        if (window.ExdiarySound) ExdiarySound.bindSettings(mount);
+      }
+      else { location.reload(); }
+    });
+}
+if (window.AgentClient && AgentClient.setAnalysisTimeoutSeconds) {
+  AgentClient.setAnalysisTimeoutSeconds({{ config.ANALYSIS_TIMEOUT_SECONDS or 480 }});
+}
+</script>
+
+{% endblock %}

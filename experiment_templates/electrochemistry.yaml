@@ -1,0 +1,13 @@
+id: electrochemistry
+title: 电化学性能测试
+category: 表征
+description: 电池/超级电容器/电催化材料的电化学测试标准实验记录模板
+tags:
+- electrochemistry
+- battery
+- characterization
+content: <p><strong>实验目的：</strong>测试【材料名称】的【测试类型，如充放电/循环伏安/阻抗/EIS】性能，评估其作为【应用场景，如锂电正极/超电电极/电催化剂】的电化学表现。</p><p><strong>电极制备：</strong></p><ul><li>活性物质：【名称】，质量【填写】mg</li><li>导电剂：【名称，如Super
+  P/乙炔黑】，质量【填写】mg，比例【填写】%</li><li>粘结剂：【名称，如PVDF/PTFE】，质量【填写】mg，比例【填写】%</li><li>溶剂：【名称，如NMP】，用量【填写】</li><li>集流体：【铝箔/铜箔/碳纸】，尺寸【填写】</li><li>活性物质负载量：【填写】mg/cm²</li></ul><p><strong>电解液：</strong>【名称及浓度，如1M
+  LiPF6 in EC:DMC=1:1】</p><p><strong>测试条件：</strong></p><ul><li>电池组装方式：【扣式电池CR2032/三电极体系/Swagelok】</li><li>对电极/参比电极：【Li片/Ag/AgCl/Pt】</li><li>隔膜：【名称，如Celgard
+  2400】</li><li>电压窗口：【填写】~【填写】V</li><li>测试温度：【填写】°C</li></ul><p><strong>测试项目：</strong></p><ul><li>循环伏安（CV）：扫速【填写】mV/s</li><li>恒流充放电：电流密度【填写】mA/g
+  或 C倍率【填写】</li><li>交流阻抗（EIS）：频率范围【填写】Hz ~ 【填写】Hz</li><li>循环寿命：循环次数【填写】</li></ul><p><strong>备注：</strong>【填写其他信息】</p>

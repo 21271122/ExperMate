@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}实验时间线{% endblock %}
+{% block page_id %}timeline{% endblock %}
+{% block page_bg %}background-color: var(--page-bg-blue);{% endblock %}
+{% block topbar_style %}
+.topbar { background: var(--blue); }
+.topbar-back { background: var(--white); color: var(--blue); border-color: var(--white); }
+.topbar-back:hover { background: var(--blue); color: var(--white); }
+{% endblock %}
+{% block content %}
+
+<h1 style="border-bottom:none;padding-bottom:0;margin-bottom:0">实验时间线</h1>
+<p style="font-weight:700;font-size:0.8rem;opacity:0.5;letter-spacing:1px;margin-top:0">按日期查看实验记录</p>
+
+{% if experiments %}
+<div style="position:relative;padding:1rem 0;margin-left:1rem">
+  <div style="position:absolute;left:14px;top:0;bottom:0;width:8px;background:var(--black)"></div>
+
+  {% for exp in experiments %}
+  <div style="position:relative;padding-left:50px;padding-bottom:2rem;cursor:pointer;transition:transform 0.1s"
+       onclick="navigateToPage('/experiments/{{ exp.id }}')"
+       onmouseenter="this.style.transform='translateX(4px)'"
+       onmouseleave="this.style.transform=''">
+
+    <div style="position:absolute;left:6px;top:6px;width:15.3px;height:12px;border:3px solid var(--black);z-index:1;
+      {% if exp.status == 'done' %}background:var(--blue);
+      {% elif exp.status == 'planned' %}background:var(--yellow);
+      {% elif exp.status == 'running' %}background:var(--white);
+      {% elif exp.status == 'failed' %}background:var(--red);
+      {% else %}background:var(--off-white);{% endif %}">
+    </div>
+
+    <div style="border:4px solid var(--black);background:var(--white);padding:0.8rem 1rem;box-shadow:6px 6px 0px var(--shadow-color);transition:box-shadow 0.15s"
+         onmouseenter="this.style.boxShadow='10px 10px 0px var(--shadow-color)'"
+         onmouseleave="this.style.boxShadow='6px 6px 0px var(--shadow-color)'">
+      <div style="font-weight:700;font-size:0.75rem;opacity:0.5;letter-spacing:1px;margin-bottom:0.2rem">{{ exp.date }}</div>
+      <div style="font-weight:700;font-size:0.78rem;margin-bottom:0.2rem">{{ exp.id }}</div>
+      <div style="font-weight:700;font-size:0.95rem;margin-bottom:0.4rem">{{ exp.title or '未命名实验' }}</div>
+      <div style="display:flex;gap:0.3rem;flex-wrap:wrap">
+        <span class="status-badge status-{{ exp.status }}">{{ {'done':'已完成', 'running':'进行中', 'planned':'计划中', 'repeated':'复刻', 'failed':'失败'}.get(exp.status, exp.status) }}</span>
+        {% for tag in (exp.tags or [])[:3] %}
+        <span class="tag-pill">{{ tag }}</span>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <h3>还没有实验记录</h3>
+  <p>创建第一条实验记录后，它会按日期显示在这里。</p>
+  <a href="/new" role="button" style="margin-top:1rem">+ 新建实验记录</a>
+</div>
+{% endif %}
+
+{% endblock %}

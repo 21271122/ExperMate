@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ analysis.get('id', '分析报告') }} — 打印</title>
+<script src="/static/vendor/marked/marked.min.js"></script>
+<style>
+  @page { margin: 2cm; size: A4; }
+  body {
+    font-family: "Times New Roman", "SimSun", serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: #000;
+  }
+  h1 { font-size: 18pt; text-align: center; border-bottom: 2px solid #333; padding-bottom: 0.5em; margin-top: 0; }
+  h2 { font-size: 14pt; margin-top: 1.5em; border-bottom: 1px solid #999; padding-bottom: 0.2em; page-break-after: avoid; }
+  h3 { font-size: 12pt; margin-top: 1em; }
+  .meta { text-align: center; font-size: 9pt; color: #555; margin-bottom: 2em; }
+  .meta span { margin: 0 0.5em; }
+  ol, ul { margin: 0.5em 0; padding-left: 1.5em; }
+  li { margin-bottom: 0.3em; }
+  img { max-width: 100%; height: auto; }
+  .no-print { display: none; }
+  .section { margin-bottom: 1.5em; }
+  .tag-pill { display: inline; padding: 0 0.3em; font-size: 9pt; }
+  .print-btn {
+    display: inline-block;
+    padding: 0.6em 1.5em;
+    font-size: 12pt;
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    background: #0071e3;
+    color: #fff;
+    font-weight: 500;
+  }
+  .print-btn:hover { background: #005bb5; }
+  .print-guide {
+    display: block;
+    margin-bottom: 2em;
+    padding: 1.2em 1.5em;
+    background: #e8f4fd;
+    border: 1px solid #b8d8f0;
+    border-radius: 8px;
+    font-size: 11pt;
+    color: #1a3a5c;
+    line-height: 1.8;
+  }
+  .print-guide ol { margin: 0.5em 0 0.5em 1.2em; padding: 0; }
+  .print-guide ol li { margin-bottom: 0.3em; }
+  .print-guide strong { color: #005bb5; }
+  .question-box {
+    border: 1px solid #333;
+    padding: 0.8em 1em;
+    margin: 1em 0;
+    background: #f9f9f9;
+  }
+  .question-box strong { font-size: 10pt; text-transform: uppercase; letter-spacing: 1px; }
+
+  @media screen {
+    body { background: #f5f5f5; padding: 2em 0; }
+    .print-wrapper {
+      max-width: 210mm;
+      margin: 0 auto;
+      background: #fff;
+      padding: 2cm;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+  }
+  @media print {
+    .print-btn, .print-guide { display: none; }
+    .print-wrapper { padding: 0; box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="print-wrapper">
+
+  <div class="print-guide no-print">
+    <strong>&#x1f4c4; 如何保存为 PDF 文件：</strong>
+    <ol>
+      <li>点击下方的<strong>"打开打印对话框"</strong>按钮</li>
+      <li>在弹出的打印窗口中，找到<strong>"目标打印机"</strong>（或 "Destination"）下拉菜单</li>
+      <li>选择 <strong>"另存为 PDF"</strong>（或 "Save as PDF"）</li>
+      <li>点击 <strong>"保存"</strong>（或 "Print"），选择保存位置即可</li>
+    </ol>
+  </div>
+
+  <button class="print-btn no-print" onclick="window.print()">&#x1f5a8; 打开打印对话框</button>
+
+  <h1>{{ analysis.get('id', '分析报告') }}</h1>
+  <div class="meta">
+    <span>{{ analysis.get('timestamp', '') }}</span>
+  </div>
+
+  {% if analysis.get('question') %}
+  <div class="question-box">
+    <strong>Question</strong>
+    <p style="margin:0.3em 0 0 0;font-weight:600">{{ analysis.get('question') }}</p>
+  </div>
+  {% endif %}
+
+  {% set refs = analysis.get('selected_ids', []) %}
+  {% if refs %}
+  <div class="section">
+    <h2>Referenced Experiments</h2>
+    <p>{% for rid in refs %}<span class="tag-pill">{{ rid }}</span>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  </div>
+  {% endif %}
+
+  <hr style="border:1px solid #333;margin:1.5em 0">
+
+  <div class="markdown-content">{{ analysis.get('analysis', '') }}</div>
+
+</div>
+
+<div class="no-print" style="text-align:center;padding:1.5rem">
+  <button class="print-btn" onclick="window.print()">&#x1f5a8; 打开打印对话框</button>
+  <button class="print-btn" onclick="window.close()" style="margin-left:0.5rem;background:#888">关闭</button>
+</div>
+
+<script>
+document.querySelectorAll('.markdown-content').forEach(function(el) {
+  el.innerHTML = marked.parse(el.textContent);
+});
+</script>
+</body>
+</html>

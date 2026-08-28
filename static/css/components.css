@@ -1,0 +1,175 @@
+/* ============================================================
+   components.css — Shared component styles (selector, edit, etc.)
+   ============================================================ */
+
+/* ---- Selector Cards (from _selector_styles.html) ---- */
+
+.sel-card {
+  border: 3px solid var(--black); overflow: hidden; background: var(--white); margin: 0.5rem 0;
+}
+.sel-card[data-status="cancelled"],
+.sel-card[data-status="expired"] { opacity: 0.7; pointer-events: none; }
+
+.sel-topbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.5rem 0.8rem; background: var(--off-white);
+  border-bottom: 2px solid var(--black); font-weight: 700; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 1px;
+}
+.sel-topbar button { font-size: 0.7rem; padding: 0.2rem 0.5rem; border: 2px solid var(--black); background: var(--white); cursor: pointer; font-weight: 700; }
+.sel-topbar button:hover { background: var(--black); color: var(--white); }
+
+.sel-body { max-height: 360px; overflow-y: auto; }
+.sel-item {
+  display: flex; align-items: flex-start; gap: 0.5rem;
+  padding: 0.45rem 0.8rem; border-bottom: 1px solid var(--black);
+  cursor: pointer; user-select: none;
+}
+.sel-item:hover { background: var(--off-white); }
+.sel-item:last-child { border-bottom: none; }
+
+.sel-item .sel-check {
+  width: 20px; height: 20px; margin-top: 2px;
+  border: 2px solid var(--black); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: transparent;
+}
+.sel-item .sel-check.checked { background: var(--black); color: var(--white); }
+
+.sel-info { flex: 1; min-width: 0; }
+.sel-info .si-id { font-weight: 700; font-family: 'Courier New', monospace; font-size: 0.8rem; }
+.sel-info .si-title { font-size: 0.82rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0.1rem 0; }
+.sel-info .si-meta { font-size: 0.72rem; opacity: 0.5; font-weight: 600; }
+
+.sel-more {
+  display: block; width: 100%; padding: 0.5rem; text-align: center;
+  font-size: 0.78rem; font-weight: 700;
+  background: var(--off-white); border: none; border-top: 2px solid var(--black); cursor: pointer;
+  text-transform: uppercase; letter-spacing: 1px;
+}
+.sel-more:hover { background: var(--black); color: var(--white); }
+
+.sel-status-text { padding: 0.75rem 1rem; font-size: 0.85rem; font-weight: 700; }
+.sel-status-text.confirmed { background: var(--off-white); }
+.sel-status-text.cancelled { opacity: 0.5; }
+
+.sel-modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center; z-index: 1000;
+}
+.sel-modal {
+  width: 90vw; max-width: 520px; max-height: 80vh;
+  background: var(--white); border: 4px solid var(--black); overflow: hidden;
+  display: flex; flex-direction: column; box-shadow: 10px 10px 0px #111;
+}
+.sel-modal-search { padding: 0.6rem 0.8rem; border-bottom: 2px solid var(--black); }
+.sel-modal-search input {
+  width: 100%; padding: 0.4rem 0.6rem; font-size: 0.85rem;
+  border: 3px solid var(--black); outline: none; font-family: inherit;
+}
+.sel-modal-search input:focus { border-color: var(--blue); }
+.sel-modal-list { flex: 1; overflow-y: auto; }
+.sel-modal-bottombar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.6rem 0.8rem; border-top: 2px solid var(--black); background: var(--off-white);
+}
+.sel-modal-bottombar .sel-count { font-size: 0.8rem; font-weight: 700; }
+.sel-modal-bottombar .sel-actions { display: flex; gap: 0.5rem; }
+.sel-modal-bottombar button {
+  font-size: 0.75rem; padding: 0.3rem 0.7rem; cursor: pointer;
+  border: 2px solid var(--black); font-weight: 700; text-transform: uppercase;
+}
+.sel-modal-bottombar button.sel-btn-cancel { background: var(--white); }
+.sel-modal-bottombar button.sel-btn-cancel:hover { background: var(--off-white); }
+.sel-modal-bottombar button.sel-btn-confirm { background: var(--black); color: var(--white); }
+.sel-modal-bottombar button.sel-btn-confirm:hover { background: var(--white); color: var(--black); }
+
+.sel-bottombar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.5rem 0.8rem; border-top: 2px solid var(--black); background: var(--off-white);
+}
+.sel-bottombar .sel-count { font-size: 0.78rem; font-weight: 700; }
+.sel-bottombar .sel-actions { display: flex; gap: 0.5rem; }
+.sel-bottombar button {
+  font-size: 0.75rem; padding: 0.3rem 0.7rem; cursor: pointer;
+  border: 2px solid var(--black); font-weight: 700; text-transform: uppercase;
+}
+.sel-bottombar button.sel-btn-cancel { background: var(--white); }
+.sel-bottombar button.sel-btn-cancel:hover { background: var(--off-white); }
+.sel-bottombar button.sel-btn-confirm { background: var(--black); color: var(--white); }
+.sel-bottombar button.sel-btn-confirm:hover { background: var(--white); color: var(--black); }
+
+.analysis-summary-card {
+  border: 3px solid var(--black); padding: 0.75rem 1rem; margin: 0.5rem 0; background: var(--off-white);
+}
+.analysis-summary-card .asc-title { font-weight: 700; font-size: 0.85rem; margin-bottom: 0.3rem; text-transform: uppercase; }
+.analysis-summary-card .asc-excerpt {
+  font-size: 0.8rem; opacity: 0.7; margin-bottom: 0.5rem;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.analysis-summary-card .asc-link { font-size: 0.75rem; font-weight: 700; color: var(--black); text-decoration: none; text-transform: uppercase; }
+
+/* ---- Experiment Detail Edit (from view.html inline) ---- */
+
+.editable-dashed {
+  display: inline-block; padding: 2px 6px; cursor: pointer; position: relative; overflow: visible;
+}
+.editable-dashed:hover { background: var(--off-white); }
+.editable-dashed.block { display: block; width: 100%; padding: 0.5rem; }
+.dash-svg { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 1; }
+.dash-svg rect {
+  animation: dash-march 4s linear infinite;
+}
+
+@keyframes dash-march {
+  to { stroke-dashoffset: -28; }
+}
+
+@keyframes tag-jitter {
+  0%,100%{transform:translate(0,0)rotate(0deg)}
+  25%{transform:translate(-0.25px,0.2px)rotate(-0.1deg)}
+  50%{transform:translate(0.2px,-0.25px)rotate(0.1deg)}
+  75%{transform:translate(0.25px,0.15px)rotate(-0.06deg)}
+}
+.tag-pill.tag-jitter { animation: tag-jitter 0.25s ease-in-out infinite; }
+
+button.row-del { color: var(--red) !important; border-color: var(--red) !important; }
+button.row-del:hover { background: var(--red) !important; color: var(--white) !important; }
+
+/* ---- Responsive ---- */
+
+@media (max-width: 480px) {
+  .sel-item { padding: 0.4rem 0.6rem; gap: 0.3rem; }
+  .sel-item .sel-check { width: 18px; height: 18px; }
+  .sel-info .si-id { font-size: 0.72rem; }
+  .sel-info .si-title { font-size: 0.76rem; }
+  .sel-info .si-meta { font-size: 0.68rem; }
+  .sel-topbar, .sel-bottombar { padding: 0.4rem 0.6rem; }
+  .sel-modal { width: 95vw; max-height: 90vh; }
+}
+/* ---- Attachment preview ---- */
+.attachment-preview-title { min-width: 0; overflow-wrap: anywhere; }
+.attachment-preview-controls { display: flex; align-items: center; gap: 0.35rem; }
+
+@media (max-width: 600px) {
+  .attachment-preview-overlay { padding: 0.5rem !important; }
+  .attachment-preview-panel {
+    width: 100% !important;
+    height: min(820px, 94vh) !important;
+    box-shadow: 6px 6px 0 rgba(0,0,0,.28) !important;
+  }
+  .attachment-preview-head {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "title close" "controls controls";
+    gap: 0.38rem 0.55rem !important;
+    padding: 0.45rem 0.55rem !important;
+  }
+  .attachment-preview-title { grid-area: title; }
+  .attachment-preview-close { grid-area: close; }
+  .attachment-preview-controls {
+    grid-area: controls;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+  .attachment-preview-body { padding: 0.5rem !important; }
+}

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}登录{% endblock %}
+{% block content %}
+<style>
+#auth-box { max-width: 380px; margin: 3rem auto; border: 3px solid var(--black); padding: 2rem; }
+#auth-box h2 { margin-top: 0; }
+.tab-bar { display: flex; gap: 0; margin-bottom: 1.5rem; }
+.tab-bar button { flex: 1; padding: 0.5rem; border: 2px solid var(--black); background: var(--off-white); font-weight: 700; font-size: 1rem; cursor: pointer; }
+.tab-bar button.active { background: var(--yellow); }
+.tab-form { display: none; }
+.tab-form.active { display: block; }
+.tab-form input { width: 100%; padding: 0.5rem; border: 2px solid var(--black); font-size: 0.9rem; margin-bottom: 0.8rem; font-family: inherit; }
+.tab-form button[type=submit] { width: 100%; padding: 0.5rem; background: var(--yellow); color: var(--black); border: 2px solid var(--black); font-weight: 700; font-size: 1rem; cursor: pointer; }
+#auth-msg { margin-top: 0.8rem; font-size: 0.85rem; font-weight: 700; }
+</style>
+
+<div id="auth-box">
+  <div class="tab-bar">
+    <button id="tab-login-btn" class="active" onclick="switchTab('login')">登录</button>
+    <button id="tab-register-btn" onclick="switchTab('register')">注册</button>
+  </div>
+
+  <form id="login-form" class="tab-form active" onsubmit="doLogin(event)">
+    <input type="text" id="login-username" placeholder="用户名" required autocomplete="username">
+    <input type="password" id="login-password" placeholder="密码" required autocomplete="current-password">
+    <button type="submit">登录</button>
+    <div id="login-msg" style="margin-top:0.5rem;font-size:0.8rem;font-weight:700;color:var(--red)"></div>
+  </form>
+
+  <form id="register-form" class="tab-form" onsubmit="doRegister(event)">
+    <input type="text" id="reg-username" placeholder="用户名（至少2字符）" required autocomplete="username" minlength="2">
+    <input type="email" id="reg-email" placeholder="邮箱（用于找回密码）" required autocomplete="email">
+    <input type="password" id="reg-password" placeholder="密码（至少8个字符，仅字母/数字/一般标点）" required autocomplete="new-password" minlength="8">
+    <button type="submit">注册</button>
+    <div id="reg-msg" style="margin-top:0.5rem;font-size:0.8rem;font-weight:700;color:var(--red)"></div>
+  </form>
+</div>
+
+<p style="text-align:center;opacity:0.5;font-size:0.8rem"><a href="/" style="color:inherit">跳过登录，进入离线模式</a></p>
+
+<script>
+function switchTab(tab) {
+  document.getElementById('tab-login-btn').classList.toggle('active', tab === 'login');
+  document.getElementById('tab-register-btn').classList.toggle('active', tab === 'register');
+  document.getElementById('login-form').classList.toggle('active', tab === 'login');
+  document.getElementById('register-form').classList.toggle('active', tab === 'register');
+}
+
+async function doLogin(e) {
+  e.preventDefault();
+  var u = document.getElementById('login-username').value.trim();
+  var p = document.getElementById('login-password').value;
+  var el = document.getElementById('login-msg');
+  try {
+    var r = await fetch('/api/e2ee/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:u,password:p})});
+    var d = await r.json();
+    if (!d.ok) { el.textContent = d.error || '登录失败'; return; }
+    localStorage.setItem('exdiary_token', d.token);
+    document.cookie = 'exdiary_token=' + d.token + ';path=/;max-age=86400;SameSite=Lax';
+    localStorage.setItem('exdiary_user_id', d.account);
+    sessionStorage.removeItem('exdiary_agent_state');
+    sessionStorage.removeItem('exdiary_child_state');
+    // 如果主页面已打开，通知它重新初始化 agent
+    try { localStorage.setItem('exdiary_login_event', JSON.stringify({token: d.token, user: d.account, ts: Date.now()})); } catch(e) {}
+    window.location.href = '/';
+  } catch(err) { el.textContent = '网络错误'; }
+}
+
+async function doRegister(e) {
+  e.preventDefault();
+  var u = document.getElementById('reg-username').value.trim();
+  var em = document.getElementById('reg-email').value.trim();
+  var p = document.getElementById('reg-password').value;
+  var el = document.getElementById('reg-msg');
+  if (u.length < 2) { el.textContent = '用户名至少2个字符'; return; }
+  if (em.indexOf('@') < 0) { el.textContent = '请填写有效邮箱'; return; }
+  if (p.length < 8) { el.textContent = '密码至少8个字符'; return; }
+  try {
+    var r = await fetch('/api/e2ee/register', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:u,email:em,password:p})});
+    var d = await r.json();
+    if (!d.ok) { el.textContent = d.error || '注册失败'; return; }
+    // e2ee 注册不返回 token → 注册成功后自动登录拿 token
+    var lr = await fetch('/api/e2ee/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:u,password:p})});
+    var ld = await lr.json();
+    if (!ld.ok) { window.location.href='/login'; return; }
+    localStorage.setItem('exdiary_token', ld.token);
+    document.cookie = 'exdiary_token=' + ld.token + ';path=/;max-age=86400;SameSite=Lax';
+    localStorage.setItem('exdiary_user_id', ld.account);
+    sessionStorage.removeItem('exdiary_agent_state');
+    sessionStorage.removeItem('exdiary_child_state');
+    if (d.has_offline_data && confirm('检测到本地离线数据，是否导入到您的账号？')) {
+      await fetch('/api/auth/import-offline', {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+ld.token},body:'{}'});
+    }
+    window.location.href = '/';
+  } catch(err) { el.textContent = '网络错误'; }
+}
+</script>
+{% endblock %}

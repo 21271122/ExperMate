@@ -1,0 +1,10 @@
+id: ball-milling
+title: 球磨法制粉
+category: 合成
+description: 高能球磨法制备复合粉体或机械合金化的标准实验记录模板
+tags:
+- ball-milling
+- synthesis
+- composite
+content: <p><strong>实验目的：</strong>通过球磨法制备【目标粉体名称】复合粉体，研究【变量，如球磨时间/转速/球料比】对粉体【性能指标，如粒径/混合均匀性/相变】的影响。</p><p><strong>材料：</strong></p><ul><li>原料1：【名称】，用量【填写】g，纯度【填写】</li><li>原料2：【名称】，用量【填写】g，纯度【填写】</li><li>过程控制剂（PCA）：【名称，如乙醇/硬脂酸】，用量【填写】mL或wt%</li></ul><p><strong>球磨参数：</strong></p><ul><li>球磨罐材质：【不锈钢/氧化锆/玛瑙/碳化钨】</li><li>球磨罐容积：【填写】mL</li><li>磨球材质及尺寸：【填写，如Φ10mm氧化锆球】</li><li>球料比：【填写，如10:1】</li><li>转速：【填写】rpm</li><li>球磨时间：【填写】小时</li><li>球磨模式：【单向/双向交替】，停机间隔【填写】分钟</li><li>气氛保护：【氩气/N2/空气】</li></ul><p><strong>实验步骤：</strong></p><ol><li>称取各原料粉末</li><li>将磨球和原料按比例装入球磨罐</li><li>加入过程控制剂</li><li>（如需）充入保护气体</li><li>密封球磨罐，安装到球磨机上</li><li>设定参数，启动球磨</li><li>球磨结束后，取出粉末，过筛（如需）</li></ol><p><strong>表征计划：</strong>XRD
+  / SEM / 粒径分析 / BET / 【其他】</p><p><strong>备注：</strong>【填写其他信息，如罐体温度、出料情况等】</p>

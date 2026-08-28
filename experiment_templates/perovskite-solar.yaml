@@ -1,0 +1,15 @@
+id: perovskite-solar
+title: 钙钛矿太阳能电池制备
+category: 器件
+description: 钙钛矿太阳能电池完整制备流程，含各层旋涂与蒸镀工艺记录
+tags:
+- thin-film
+- solar-cell
+- coating
+- perovskite
+content: <p><strong>实验目的：</strong>制备结构为【填写，如FTO/ETL/Perovskite/HTL/Au】的钙钛矿太阳能电池，优化【变量，如钙钛矿组分/退火条件/界面修饰】，提升光电转换效率。</p><p><strong>材料：</strong></p><ul><li>基底：【FTO/ITO玻璃】，尺寸【填写，如2×2
+  cm】，方阻【填写】Ω/sq</li><li>电子传输层（ETL）：【如SnO2/TiO2/PCBM】，前驱体【填写】</li><li>钙钛矿前驱体：【如PbI2+MAI/FAI/CsI】，配比【填写】，溶剂【DMF/DMSO】，浓度【填写】M</li><li>空穴传输层（HTL）：【如Spiro-OMeTAD/PTAA】，浓度【填写】mg/mL</li><li>电极：Au/Ag/C，厚度【填写】nm</li></ul><p><strong>实验步骤：</strong></p><ol><li>基底清洗：洗涤剂超声→去离子水→丙酮→异丙醇，各【填写】分钟</li><li>UV-臭氧/等离子体处理【填写】分钟</li><li>旋涂
+  ETL：【转速】rpm，【时间】s → 退火【温度】°C，【时间】min</li><li>（如需要）进入手套箱</li><li>旋涂钙钛矿层：【转速】rpm，【时间】s，滴加反溶剂【名称，如氯苯】，【时间】s</li><li>退火：【温度】°C，【时间】min</li><li>旋涂
+  HTL：【转速】rpm，【时间】s</li><li>（如需）氧化处理：空气中放置【时间】h 或 O2 plasma</li><li>蒸镀电极：厚度【填写】nm，速率【填写】Å/s</li></ol><p><strong>器件性能测试（JV曲线）：</strong></p><ul><li>光源：AM
+  1.5G，100 mW/cm²</li><li>扫描方向：正向/反向</li><li>有效面积：【填写】cm²</li><li>Voc：【填写】V，Jsc：【填写】mA/cm²，FF：【填写】%，PCE：【填写】%</li></ul><p><strong>表征计划：</strong>SEM截面
+  / XRD / PL / TRPL / UV-Vis吸收 / IPCE</p><p><strong>备注：</strong>【填写其他信息】</p>

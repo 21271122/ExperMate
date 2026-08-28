@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exdiary AI Shell — 视觉重构 Demo</title>
+<style>
+/* ============================================================
+   Demo — 轻量化 De Stijl 设计系统
+   核心理念：保留蒙德里安色彩基因，去重边框，透气呼吸
+   ============================================================ */
+
+:root {
+  --red:    #d94a4a;
+  --blue:   #3b6fb6;
+  --yellow: #e8c84c;
+  --white:  #ffffff;
+  --black:  #1a1a1a;
+  --gray-50:  #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-400: #9ca3af;
+  --gray-600: #6b7280;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --font-sans: 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
+  --font-mono: 'SF Mono', 'Consolas', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100vw; height: 100vh;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-size: 14px; line-height: 1.6;
+  color: var(--black);
+  background: var(--gray-100);
+}
+
+/* -- Layout -- */
+#app-shell {
+  display: flex; flex-direction: column;
+  width: 100%; height: 100%;
+  max-width: 960px; margin: 0 auto;
+  background: var(--white);
+  box-shadow: var(--shadow-md);
+}
+
+/* -- Chat Header -- */
+#chat-header {
+  display: flex; align-items: center; gap: 12px;
+  height: 44px; flex-shrink: 0;
+  padding: 0 24px;
+  background: var(--black); color: var(--white);
+  font-size: 0.78rem; font-weight: 700; letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+#chat-header .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--red);
+}
+#chat-header .brand { display: flex; align-items: center; gap: 8px; text-decoration: none; color: inherit; }
+#chat-header .badge {
+  font-size: 0.65rem; padding: 2px 10px; border-radius: 100px;
+  border: 1px solid rgba(255,255,255,0.3);
+  opacity: 0.7;
+}
+
+/* -- Accent bar (三色细线) -- */
+.accent-bar {
+  display: flex; height: 2px; flex-shrink: 0;
+}
+.accent-bar span { flex: 1; }
+.accent-bar .a-red    { background: var(--red); }
+.accent-bar .a-yellow { background: var(--yellow); }
+.accent-bar .a-blue   { background: var(--blue); }
+
+/* -- Chat Messages Area -- */
+#chat-messages {
+  flex: 1; overflow-y: auto; overscroll-behavior: contain;
+  padding: 24px 28px 12px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+
+/* -- Message Bubbles -- */
+.msg { display: flex; max-width: 82%; }
+.msg.user { align-self: flex-end; }
+.msg.agent { align-self: flex-start; }
+
+.msg .bubble {
+  padding: 10px 16px; border-radius: var(--radius-md);
+  font-size: 0.9rem; line-height: 1.65;
+}
+.msg.agent .bubble {
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-top-left-radius: 2px;
+}
+.msg.user .bubble {
+  background: var(--black); color: var(--white);
+  border-top-right-radius: 2px;
+}
+
+.msg .bubble p { margin: 0.3em 0; }
+.msg .bubble p:first-child { margin-top: 0; }
+.msg .bubble p:last-child { margin-bottom: 0; }
+.msg .bubble strong { font-weight: 800; }
+.msg .bubble code {
+  font-family: var(--font-mono); font-size: 0.85em;
+  background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 3px;
+}
+.msg.user .bubble code { background: rgba(255,255,255,0.15); }
+
+/* -- Tool Card (轻量版) -- */
+.tool-card {
+  align-self: stretch; max-width: 100%;
+  margin: 4px 0;
+  border: 1px solid var(--gray-200); border-radius: var(--radius-sm);
+  background: var(--white); overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.tool-card-header {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 14px; font-size: 0.7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1px;
+  background: var(--gray-50); color: var(--gray-600);
+  border-bottom: 1px solid var(--gray-200);
+}
+.tool-card-header::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--blue); flex-shrink: 0;
+}
+.tool-card.answer .tool-card-header::before { background: var(--red); }
+.tool-card.report .tool-card-header::before { background: var(--yellow); }
+.tool-card.record .tool-card-header::before { background: var(--blue); }
+.tool-card-body {
+  padding: 10px 14px; font-size: 0.84rem; line-height: 1.6;
+  color: var(--black);
+}
+.tool-card-footer {
+  padding: 6px 14px; font-size: 0.72rem; font-weight: 600;
+  border-top: 1px solid var(--gray-200); background: var(--gray-50);
+}
+.tool-card-footer a { color: var(--blue); text-decoration: none; font-weight: 700; }
+.tool-card-footer a:hover { text-decoration: underline; }
+
+/* -- Diff rows -- */
+.diff-row { display: flex; gap: 8px; padding: 1px 0; font-size: 0.82rem; }
+.diff-row .df { font-weight: 700; min-width: 5em; text-transform: uppercase; font-size: 0.7rem; color: var(--gray-600); }
+.diff-row .do { text-decoration: line-through; opacity: 0.4; }
+.diff-row .dn { font-weight: 800; }
+
+/* -- Status bar -- */
+#status-bar {
+  font-size: 0.68rem; font-weight: 600;
+  color: var(--gray-400); padding: 2px 28px;
+  flex-shrink: 0;
+}
+
+/* -- Color Divider (Mondrian thin line) -- */
+#color-divider {
+  display: flex; height: 2px; flex-shrink: 0;
+  margin: 0 28px 8px;
+}
+#color-divider span { flex-grow: 1; transition: flex-grow 1s ease; }
+#color-divider .cd-red    { background: var(--red); }
+#color-divider .cd-white  { background: var(--white); }
+#color-divider .cd-yellow { background: var(--yellow); }
+#color-divider .cd-blue   { background: var(--blue); }
+
+/* -- Input Area -- */
+#chat-input-area {
+  padding: 0 28px 16px; flex-shrink: 0;
+  display: flex; align-items: flex-end; gap: 8px;
+}
+#chat-input-wrapper {
+  flex: 1; display: flex; align-items: center;
+  border: 1px solid var(--gray-200); border-radius: var(--radius-md);
+  padding: 6px 14px; background: var(--gray-50);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+#chat-input-wrapper:focus-within {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(59,111,182,0.1);
+}
+#chat-input {
+  flex: 1; border: none; outline: none; font-family: inherit;
+  font-size: 0.9rem; line-height: 1.5; resize: none;
+  min-height: 24px; max-height: 140px;
+  background: transparent; color: var(--black);
+}
+#chat-input::placeholder { color: var(--gray-400); }
+#btn-send {
+  flex-shrink: 0; height: 38px; width: 56px;
+  border: none; border-radius: var(--radius-sm);
+  background: var(--black); color: var(--white);
+  cursor: pointer;
+  font-family: inherit; font-size: 0.75rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1px;
+  transition: background 0.15s, opacity 0.15s;
+}
+#btn-send:hover { background: #333; }
+#btn-send:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* -- Empty state -- */
+.chat-empty {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  text-align: center; padding: 3rem 2rem; opacity: 0.5;
+  gap: 8px;
+}
+.chat-empty h2 {
+  font-size: 1.1rem; font-weight: 800; letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.chat-empty p { font-size: 0.8rem; max-width: 300px; line-height: 1.5; color: var(--gray-600); }
+
+/* -- Quick replies -- */
+#quick-replies {
+  display: none; gap: 6px; padding: 6px 28px;
+  flex-wrap: wrap; flex-shrink: 0;
+}
+#quick-replies button {
+  font-size: 0.72rem; padding: 5px 12px;
+  border: 1px solid var(--gray-200); border-radius: 100px;
+  background: var(--white); cursor: pointer; font-weight: 600;
+  font-family: inherit; color: var(--gray-600);
+  transition: all 0.15s;
+}
+#quick-replies button:hover { background: var(--black); color: var(--white); border-color: var(--black); }
+
+/* -- Toast -- */
+.toast {
+  position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+  background: var(--black); color: var(--white); padding: 8px 20px;
+  border-radius: 100px;
+  font-size: 0.78rem; font-weight: 600;
+  z-index: 2000; box-shadow: var(--shadow-md);
+  animation: toastIn 0.3s ease;
+}
+@keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(-8px); } }
+
+/* -- Responsive (mobile) -- */
+@media (max-width: 600px) {
+  #app-shell { max-width: 100%; }
+  #chat-header { padding: 0 14px; height: 40px; }
+  #chat-messages { padding: 14px 14px 8px; }
+  #status-bar { padding: 2px 14px; }
+  #color-divider { margin: 0 14px 6px; height: 2px; }
+  #chat-input-area { padding: 0 14px 12px; }
+  #quick-replies { padding: 4px 14px; }
+  #chat-input-wrapper { padding: 4px 10px; }
+  #btn-send { height: 34px; width: 48px; font-size: 0.7rem; }
+}
+</style>
+</head>
+<body>
+
+<div id="app-shell">
+  <!-- Header -->
+  <div id="chat-header">
+    <a href="/" class="brand"><span class="dot"></span>Exdiary</a>
+    <span class="badge">Free</span>
+  </div>
+
+  <!-- Accent bar -->
+  <div class="accent-bar">
+    <span class="a-red"></span>
+    <span class="a-yellow"></span>
+    <span class="a-blue"></span>
+  </div>
+
+  <!-- Messages -->
+  <div id="chat-messages">
+    <div class="chat-empty">
+      <h2>Exdiary AI Shell</h2>
+      <p>Ask me anything about your experiments. I can search, analyze, record new data, and show results right here.</p>
+    </div>
+
+    <!-- Agent greeting -->
+    <div class="msg agent">
+      <div class="bubble">
+        <p>Hello! I'm your <strong>Exdiary AI Assistant</strong>. I can help you:</p>
+        <ul style="padding-left:1.2em;margin:0.4em 0">
+          <li><strong>Search</strong> experiments by keywords, dates, or tags</li>
+          <li><strong>Analyze</strong> trends across multiple experiments</li>
+          <li><strong>Record</strong> new experiment data conversationally</li>
+        </ul>
+        <p>Try asking: <em>"Show me recent photocatalysis experiments"</em></p>
+      </div>
+    </div>
+
+    <!-- User message -->
+    <div class="msg user">
+      <div class="bubble">Show me EXP-2026-003</div>
+    </div>
+
+    <!-- Tool card: answer -->
+    <div class="tool-card answer">
+      <div class="tool-card-header">Q: Show me EXP-2026-003</div>
+      <div class="tool-card-body">
+        <strong style="font-size:0.95rem">EXP-2026-003 — TiO₂ P25 Photocatalytic Degradation Test</strong>
+        <div style="margin-top:6px;font-size:0.8rem;color:var(--gray-600);display:flex;gap:16px">
+          <span>Status: <span style="color:var(--blue);font-weight:700">Done</span></span>
+          <span>Date: 2026-06-15</span>
+          <span>By: Zhang Wei</span>
+        </div>
+      </div>
+      <div class="tool-card-footer">
+        Source: Confirmed from file &nbsp;|&nbsp;
+        <a href="#">View EXP-2026-003 →</a>
+      </div>
+    </div>
+
+    <!-- Agent response -->
+    <div class="msg agent">
+      <div class="bubble">
+        <p>Here's the experiment you asked about. It used <strong>TiO₂ P25</strong> as catalyst under UV irradiation for methylene blue degradation.</p>
+      </div>
+    </div>
+
+    <!-- User message -->
+    <div class="msg user">
+      <div class="bubble">Analyze all photocatalysis experiments from June</div>
+    </div>
+
+    <!-- Tool card: report -->
+    <div class="tool-card report">
+      <div class="tool-card-header">Analysis Complete</div>
+      <div class="tool-card-body">
+        <strong>ANAL-2026-007</strong> — Photocatalysis June Summary
+        <div style="margin-top:6px;font-size:0.82rem">
+          Analyzed 5 experiments. TiO₂ P25 showed highest degradation rate (94.2%),
+          followed by ZnO (78.1%). UV intensity correlates strongly with efficiency (r=0.89).
+        </div>
+      </div>
+      <div class="tool-card-footer">
+        <a href="#">View Full Report →</a>
+      </div>
+    </div>
+
+    <!-- Tool card: diff (record_generated) -->
+    <div class="tool-card record">
+      <div class="tool-card-header">Experiment Generated</div>
+      <div class="tool-card-body">
+        <strong>EXP-2026-008</strong> — TiO₂ P25 Repeat Test
+        <div class="diff-row"><span class="df">Status</span> <span class="do">Planned</span> → <span class="dn">Done</span></div>
+        <div class="diff-row"><span class="df">Date</span>   <span class="do">—</span> → <span class="dn">2026-07-13</span></div>
+      </div>
+      <div class="tool-card-footer">
+        <a href="#">View EXP-2026-008 →</a>
+      </div>
+    </div>
+
+    <!-- Agent final -->
+    <div class="msg agent">
+      <div class="bubble">
+        <p>I've created <strong>EXP-2026-008</strong> based on our conversation. You can view and edit it anytime.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status bar -->
+  <div id="status-bar" style="display:block">Ready</div>
+
+  <!-- Color divider -->
+  <div id="color-divider">
+    <span class="cd-red"></span>
+    <span class="cd-white"></span>
+    <span class="cd-yellow"></span>
+    <span class="cd-blue"></span>
+  </div>
+
+  <!-- Input -->
+  <div id="chat-input-area">
+    <div id="chat-input-wrapper">
+      <textarea id="chat-input" placeholder="Type a message..." rows="1"></textarea>
+    </div>
+    <button id="btn-send">Send</button>
+  </div>
+</div>
+
+<script>
+// Color divider animation
+(function() {
+  var spans = document.querySelectorAll("#color-divider span");
+  function animate() {
+    var parts = [Math.random()*50+10, Math.random()*50+10, Math.random()*50+10, Math.random()*50+10];
+    var total = parts.reduce(function(a,b){return a+b;}, 0);
+    spans.forEach(function(s, i) { s.style.flexGrow = (parts[i]/total*10).toFixed(2); });
+    setTimeout(animate, 1000 + Math.random()*800);
+  }
+  animate();
+})();
+</script>
+
+</body>
+</html>

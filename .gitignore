@@ -1,0 +1,53 @@
+.env
+*.pyc
+__pycache__/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.venv/
+.claude/
+.agents/
+.coverage
+/AGENTS.md
+/CLAUDE.md
+/tests/
+/design-explorations/
+/snapshot_data.py
+/run.bat
+/experiments/
+/uploads/
+/data/
+/relay/blobs/
+
+# Runtime data — internal directories (runtime artifacts, not source)
+experiments/_logs/
+experiments/_threads/
+experiments/_debug/
+experiments/_update_logs/
+experiments/_analysis_history/
+config.yaml
+
+# e2ee 账号库与 recovery KMS key（敏感，不入库）
+_e2ee_accounts.db
+_e2ee_kms.key
+
+# 本机运行态与测试产物
+_debug/
+_history/
+_tmp_uisfx/
+.pytest-tmp/
+.pytest-*/
+*.db-shm
+*.db-wal
+.idea/
+
+# 本机 SQLite 数据库。已跟踪的历史数据库不会因本规则自动移除。
+*.db
+
+# 打包工具生成的目录；保留 build/ 下的构建脚本与 spec 文件。
+build/build/
+build/dist/
+
+# 根目录个人草稿，不属于项目文档或运行文件。
+/ziti.docx
+/新建 文本文档.txt

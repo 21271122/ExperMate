@@ -1,0 +1,138 @@
+{# e2ee 演示页：登录 / 注册 悬浮窗口（de-stijl 蒙德里安风格） #}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ExperMate｜小同门 — 账号</title>
+<link rel="stylesheet" href="/static/css/de-stijl.css">
+<style>
+  body { margin: 0; min-height: 100vh; background: var(--off-white, #f4f1ea); font-family: var(--sans, sans-serif); }
+  .page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2rem; padding: 2rem; }
+  .h1 { font-weight: 900; font-size: 2.4rem; letter-spacing: .04em; color: var(--black, #111); border: 0; margin: 0; }
+  .open-btn { background: var(--yellow, #ffd02a); color: var(--black, #111); border: 3px solid var(--black, #111);
+              font-weight: 800; font-size: 1.1rem; padding: .8rem 2.4rem; cursor: pointer; box-shadow: 6px 6px 0 rgba(0,0,0,.18); }
+  .open-btn:hover { background: var(--white, #fff); }
+
+  /* 遮罩 + 悬浮窗 */
+  .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: flex-start; justify-content: center; padding-top: 8vh; z-index: 1000; }
+  .modal-mask.open { display: flex; }
+  .modal { background: var(--white, #fff); border: 3px solid var(--black, #111); width: 400px; max-width: 92vw; box-shadow: 10px 10px 0 rgba(0,0,0,.25); }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; padding: .6rem 1rem; background: var(--black, #111); color: var(--white, #fff); font-weight: 800; }
+  .modal-close { background: none; border: 0; color: var(--white, #fff); font-size: 1.3rem; cursor: pointer; font-weight: 900; }
+  .tabs { display: flex; border-bottom: 3px solid var(--black, #111); }
+  .tab { flex: 1; padding: .65rem; text-align: center; font-weight: 800; cursor: pointer; border-right: 2px solid var(--black, #111); background: var(--off-white, #f4f1ea); }
+  .tab:last-child { border-right: 0; }
+  .tab.active { background: var(--yellow, #ffd02a); }
+  .modal-body { padding: 1.2rem 1.4rem; }
+  .form { display: none; }
+  .form.active { display: block; }
+  .field { margin-bottom: .9rem; }
+  .field label { display: block; font-weight: 700; font-size: .85rem; margin-bottom: .3rem; }
+  .field input { width: 100%; box-sizing: border-box; padding: .55rem; border: 2px solid var(--black, #111); font-size: .95rem; font-family: inherit; background: var(--white, #fff); }
+  .submit { width: 100%; padding: .7rem; border: 3px solid var(--black, #111); background: var(--yellow, #ffd02a); color: var(--black, #111); font-weight: 800; font-size: 1rem; cursor: pointer; }
+  .submit:hover { background: var(--white, #fff); }
+  .msg { margin-top: .8rem; font-weight: 700; font-size: .85rem; min-height: 1.1em; color: var(--red, #d00); }
+  .msg.ok { color: var(--ok-green, #0b7c3d); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="h1">ExperMate｜小同门</div>
+  <button class="open-btn" id="btnOpen">登录 / 注册</button>
+  <div id="sessionInfo" style="font-weight:700;color:var(--black,#111)"></div>
+</div>
+
+<div class="modal-mask" id="mask">
+  <div class="modal">
+    <div class="modal-head"><span>账号</span><button class="modal-close" id="btnClose">&times;</button></div>
+    <div class="tabs">
+      <div class="tab active" data-tab="login">登录</div>
+      <div class="tab" data-tab="register">注册</div>
+    </div>
+    <div class="modal-body">
+      <form class="form active" id="loginForm">
+        <div class="field"><label>账号</label><input type="text" id="loginAccount" autocomplete="username"></div>
+        <div class="field"><label>密码</label><input type="password" id="loginPassword" autocomplete="current-password"></div>
+        <button class="submit" type="submit">登录</button>
+        <div class="msg" id="loginMsg"></div>
+      </form>
+      <form class="form" id="registerForm">
+        <div class="field"><label>账号（至少 2 字符）</label><input type="text" id="regAccount" autocomplete="username"></div>
+        <div class="field"><label>恢复邮箱（忘记密码靠它找回）</label><input type="email" id="regEmail" autocomplete="email"></div>
+        <div class="field"><label>密码（至少 6 位）</label><input type="password" id="regPassword" autocomplete="new-password"></div>
+        <button class="submit" type="submit">注册</button>
+        <div class="msg" id="regMsg"></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var mask = document.getElementById("mask");
+  var tabs = document.querySelectorAll(".tab");
+  var forms = { login: document.getElementById("loginForm"), register: document.getElementById("registerForm") };
+  var msgs = { login: document.getElementById("loginMsg"), register: document.getElementById("regMsg") };
+  var info = document.getElementById("sessionInfo");
+
+  function showInfo() {
+    var acc = localStorage.getItem("e2ee_account");
+    info.textContent = acc ? ("已登录：" + acc) : "";
+  }
+  function setMsg(which, text, ok) {
+    var el = msgs[which];
+    el.textContent = text || "";
+    el.className = "msg" + (ok ? " ok" : "");
+  }
+  function open() { mask.classList.add("open"); }
+  function close() { mask.classList.remove("open"); }
+
+  document.getElementById("btnOpen").addEventListener("click", open);
+  document.getElementById("btnClose").addEventListener("click", close);
+  mask.addEventListener("click", function (e) { if (e.target === mask) close(); });
+
+  tabs.forEach(function (t) {
+    t.addEventListener("click", function () {
+      tabs.forEach(function (x) { x.classList.remove("active"); });
+      t.classList.add("active");
+      var name = t.dataset.tab;
+      Object.keys(forms).forEach(function (k) { forms[k].classList.toggle("active", k === name); });
+      setMsg("login", ""); setMsg("register", "");
+    });
+  });
+
+  function api(path, body) {
+    return fetch("/api/e2ee/" + path, { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { d.status = r.status; return d; }); });
+  }
+
+  forms.login.addEventListener("submit", function (e) {
+    e.preventDefault();
+    api("login", { account: document.getElementById("loginAccount").value.trim(),
+                   password: document.getElementById("loginPassword").value })
+      .then(function (d) {
+        if (d.ok) { localStorage.setItem("e2ee_account", d.account); close(); showInfo(); setMsg("login", "登录成功"); }
+        else { setMsg("login", d.error || "登录失败"); }
+      });
+  });
+
+  forms.register.addEventListener("submit", function (e) {
+    e.preventDefault();
+    setMsg("register", "注册中…");
+    api("register", { account: document.getElementById("regAccount").value.trim(),
+                      email: document.getElementById("regEmail").value.trim(),
+                      password: document.getElementById("regPassword").value })
+      .then(function (d) {
+        if (d.ok) { localStorage.setItem("e2ee_account", d.account); setMsg("register", d.notice || "注册成功", true); }
+        else { setMsg("register", d.error || "注册失败"); }
+      });
+  });
+
+  showInfo();
+})();
+</script>
+</body>
+</html>

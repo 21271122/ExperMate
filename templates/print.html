@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ exp.title or exp.id }} — 打印</title>
+<script src="/static/vendor/marked/marked.min.js"></script>
+<style>
+  @page { margin: 2cm; size: A4; }
+  body {
+    font-family: "Times New Roman", "SimSun", serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: #000;
+  }
+  h1 { font-size: 18pt; text-align: center; border-bottom: 2px solid #333; padding-bottom: 0.5em; margin-top: 0; }
+  h2 { font-size: 14pt; margin-top: 1.5em; border-bottom: 1px solid #999; padding-bottom: 0.2em; page-break-after: avoid; }
+  h3 { font-size: 12pt; margin-top: 1em; }
+  .meta { text-align: center; font-size: 9pt; color: #555; margin-bottom: 2em; }
+  .meta span { margin: 0 0.5em; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    border-top: 2px solid #333;
+    border-bottom: 2px solid #333;
+    margin: 1em 0;
+    page-break-inside: avoid;
+  }
+  table thead { border-bottom: 1px solid #333; }
+  table th, table td { padding: 0.4em 0.6em; text-align: left; border: none; font-size: 10pt; }
+  table th { font-weight: 600; }
+  table tbody tr { border: none; }
+  table tbody tr:nth-child(even) { background: none; }
+  ol, ul { margin: 0.5em 0; padding-left: 1.5em; }
+  li { margin-bottom: 0.3em; }
+  img { max-width: 100%; height: auto; }
+  .no-print { display: none; }
+  .section { margin-bottom: 1.5em; }
+  .tag-pill { display: inline; padding: 0 0.3em; font-size: 9pt; }
+  .print-btn {
+    display: inline-block;
+    padding: 0.6em 1.5em;
+    font-size: 12pt;
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    background: #0071e3;
+    color: #fff;
+    font-weight: 500;
+  }
+  .print-btn:hover { background: #005bb5; }
+  .print-guide {
+    display: block;
+    margin-bottom: 2em;
+    padding: 1.2em 1.5em;
+    background: #e8f4fd;
+    border: 1px solid #b8d8f0;
+    border-radius: 8px;
+    font-size: 11pt;
+    color: #1a3a5c;
+    line-height: 1.8;
+  }
+  .print-guide ol { margin: 0.5em 0 0.5em 1.2em; padding: 0; }
+  .print-guide ol li { margin-bottom: 0.3em; }
+  .print-guide strong { color: #005bb5; }
+
+  @media screen {
+    body { background: #f5f5f5; padding: 2em 0; }
+    .print-wrapper {
+      max-width: 210mm;
+      margin: 0 auto;
+      background: #fff;
+      padding: 2cm;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+  }
+  @media print {
+    .print-btn, .print-guide { display: none; }
+    .print-wrapper { padding: 0; box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="print-wrapper">
+
+  <div class="print-guide no-print">
+    <strong>&#x1f4c4; 如何保存为 PDF 文件：</strong>
+    <ol>
+      <li>点击下方的<strong>"打开打印对话框"</strong>按钮</li>
+      <li>在弹出的打印窗口中，找到<strong>"目标打印机"</strong>（或 "Destination"）下拉菜单</li>
+      <li>选择 <strong>"另存为 PDF"</strong>（或 "Save as PDF"）</li>
+      <li>点击 <strong>"保存"</strong>（或 "Print"），选择保存位置即可</li>
+    </ol>
+  </div>
+
+  <button class="print-btn no-print" onclick="window.print()">&#x1f5a8; 打开打印对话框</button>
+
+  <h1>{{ exp.title or '(无标题)' }}</h1>
+  <div class="meta">
+    <span>{{ exp.id }}</span>
+    <span>{{ exp.date }}</span>
+    {% if exp.experimenter %}<span>{{ exp.experimenter }}</span>{% endif %}
+    <span>[{{ exp.status }}]</span>
+    {% for tag in (exp.tags or []) %}<span>#{{ tag }}</span>{% endfor %}
+  </div>
+
+  {# -- 1. 目的 -- #}
+  {% if exp.purpose %}
+  <div class="section">
+    <h2>1. 目的 / 科学问题</h2>
+    <div class="markdown-content">{{ exp.purpose }}</div>
+  </div>
+  {% endif %}
+
+  {# -- 2. 材料与试剂 -- #}
+  {% if exp.materials %}
+  <div class="section">
+    <h2>2. 材料与试剂</h2>
+    <table>
+      <thead><tr><th>名称</th><th>纯度/规格</th><th>厂家/批号</th><th>用量</th><th>备注</th></tr></thead>
+      <tbody>
+      {% for m in exp.materials %}
+      <tr><td>{{ m.name if m is mapping else m }}</td><td>{{ m.purity if m is mapping else '' }}</td><td>{{ m.vendor if m is mapping else '' }}</td><td>{{ m.amount if m is mapping else '' }}</td><td>{{ m.notes if m is mapping else '' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {# -- 3. 仪器设备 -- #}
+  {% if exp.equipment %}
+  <div class="section">
+    <h2>3. 仪器设备</h2>
+    <table>
+      <thead><tr><th>设备</th><th>型号</th><th>编号/位置</th></tr></thead>
+      <tbody>
+      {% for e in exp.equipment %}
+      <tr><td>{{ e.device if e is mapping else e }}</td><td>{{ e.model if e is mapping else '' }}</td><td>{{ e.location if e is mapping else '' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {# -- 4. 实验方案 -- #}
+  {% if exp.experimental_plan %}
+  <div class="section">
+    <h2>4. 实验方案</h2>
+    <table>
+      <thead><tr><th>组别</th><th>变量条件</th><th>预期结果</th></tr></thead>
+      <tbody>
+      {% for p in exp.experimental_plan %}
+      <tr><td>{{ p.group if p is mapping else '' }}</td><td>{{ p.condition if p is mapping else '' }}</td><td>{{ p.expected if p is mapping else '' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {# -- 5. 操作步骤 -- #}
+  {% if exp.sop %}
+  <div class="section">
+    <h2>5. 操作步骤</h2>
+    <ol>
+    {% for s in exp.sop %}
+      <li>{{ s }}</li>
+    {% endfor %}
+    </ol>
+  </div>
+  {% endif %}
+
+  {# -- 6. 过程参数记录 -- #}
+  {% if exp.process_parameters %}
+  <div class="section">
+    <h2>6. 过程参数记录</h2>
+    <table>
+      <thead><tr><th>步骤</th><th>参数</th><th>设定值</th><th>实际值</th><th>偏差说明</th></tr></thead>
+      <tbody>
+      {% for pp in exp.process_parameters %}
+      <tr><td>{{ pp.step if pp is mapping else '' }}</td><td>{{ pp.parameter if pp is mapping else '' }}</td><td>{{ pp.setpoint if pp is mapping else '' }}</td><td>{{ pp.actual if pp is mapping else '' }}</td><td>{{ pp.deviation if pp is mapping else '' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {# -- 7. 异常与观察 -- #}
+  {% set obs = exp.observations or {} %}
+  {% set obs_items = obs.get('items') if obs is mapping else [] %}
+  {% if obs is mapping and (obs.get('no_anomalies') or obs_items) %}
+  <div class="section">
+    <h2>7. 异常与观察</h2>
+    {% if obs.get('no_anomalies') %}<p>无异常</p>{% endif %}
+    {% if obs_items %}
+    <ul>
+      {% for item in obs_items %}<li>{{ item }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# -- 8. 表征计划 -- #}
+  {% if exp.characterization %}
+  <div class="section">
+    <h2>8. 表征计划</h2>
+    <table>
+      <thead><tr><th>测试方法</th><th>样品编号</th><th>制样方式</th><th>送测日期</th><th>数据文件路径</th></tr></thead>
+      <tbody>
+      {% for c in exp.characterization %}
+      <tr><td>{{ c.method if c is mapping else '' }}</td><td>{{ c.sample_id if c is mapping else '' }}</td><td>{{ c.preparation if c is mapping else '' }}</td><td>{{ c.submission_date if c is mapping else '' }}</td><td>{{ c.data_path if c is mapping else '' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {# -- 9. 结果与数据分析 -- #}
+  {% set r = exp.results or {} %}
+  {% if r is mapping and (r.qualitative or r.key_data) %}
+  <div class="section">
+    <h2>9. 结果与数据分析</h2>
+    {% if r.qualitative %}
+    <h3>定性观察</h3>
+    <div class="markdown-content">{{ r.qualitative }}</div>
+    {% endif %}
+    {% if r.key_data %}
+    <h3>关键数据</h3>
+    <table>
+      <thead><tr><th>指标</th><th>值</th><th>对比组值</th><th>变化</th></tr></thead>
+      <tbody>
+      {% for kd in r.key_data %}
+      <tr><td>{{ kd.metric if kd is mapping else '' }}</td><td>{{ kd.value if kd is mapping else '' }}</td><td>{{ kd.comparison if kd is mapping else '' }}</td><td>{{ kd.change if kd is mapping else '' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# -- 10. 结论 -- #}
+  {% if exp.conclusion %}
+  <div class="section">
+    <h2>10. 结论</h2>
+    <div class="markdown-content">{{ exp.conclusion }}</div>
+  </div>
+  {% endif %}
+
+  {# -- 11. 下一步行动 -- #}
+  {% if exp.next_steps %}
+  <div class="section">
+    <h2>11. 下一步行动</h2>
+    <ol>
+    {% for ns in exp.next_steps %}
+      <li>{{ ns }}</li>
+    {% endfor %}
+    </ol>
+  </div>
+  {% endif %}
+
+  {# -- 附录：原始笔记 -- #}
+  {% if exp.original_notes %}
+  <div class="section">
+    <h2>附录：原始实验笔记</h2>
+    {% if '<' in (exp.original_notes or '') %}
+      <div>{{ exp.original_notes | safe }}</div>
+    {% else %}
+      <div style="white-space:pre-wrap">{{ exp.original_notes }}</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+</div>
+
+<div class="no-print" style="text-align:center;padding:1.5rem">
+  <button class="print-btn" onclick="window.print()">&#x1f5a8; 打开打印对话框</button>
+  <button class="print-btn" onclick="window.close()" style="margin-left:0.5rem;background:#888">关闭</button>
+</div>
+
+<script>
+document.querySelectorAll('.markdown-content').forEach(function(el) {
+  el.innerHTML = marked.parse(el.textContent);
+});
+</script>
+</body>
+</html>

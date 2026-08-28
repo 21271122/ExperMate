@@ -1,0 +1,2724 @@
+{% extends "base.html" %}
+{% block title %}Experiment List{% endblock %}
+{% block page_id %}experiments{% endblock %}
+{% block page_bg %}background-color: var(--page-bg-red);{% endblock %}
+{% block topbar_style %}
+.topbar { background: var(--black); }
+.topbar-back { background: var(--white); color: var(--black); border-color: var(--white); }
+.topbar-back:hover { background: var(--black); color: var(--white); }
+{% endblock %}
+{% block content %}
+
+<section class="exp-list-page" aria-label="Experiment list">
+  <header class="exp-list-header">
+    <h1>实验记录</h1>
+    <div class="header-right">
+      <span id="list-context">{{ experiments|length }} 条记录 · 分类：全部实验</span>
+      <div class="view-toggle" id="view-toggle" role="group" aria-label="List view">
+        <button type="button" data-view="rows" class="active" title="索引行" aria-pressed="true">&#x2261;</button>
+        <button type="button" data-view="cards" title="卡片视图" aria-pressed="false">&#x25A6;</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="search-block" aria-label="搜索实验记录">
+    <label class="sr-only" for="search-input">搜索实验记录</label>
+    <input type="search" id="search-input" placeholder="搜索实验记录…" autocomplete="off">
+  </section>
+
+  <nav class="tool-tabs" aria-label="Experiment tools">
+    <button type="button" class="tool-tab" data-panel="categories">分类</button>
+    <button type="button" class="tool-tab" data-panel="filters">筛选</button>
+    <button type="button" class="tool-tab" data-panel="compare">对比</button>
+  </nav>
+
+  <section id="panel-categories" class="tool-panel" aria-label="Categories">
+    <div class="panel-header">
+      <span>分类</span>
+      <button type="button" class="panel-action" id="category-edit-toggle">编辑</button>
+    </div>
+    <div id="category-list" class="category-list"></div>
+    <div id="category-editor" class="category-editor" hidden>
+      <button type="button" id="add-category-btn" class="add-category-btn">+ 新建分类</button>
+    </div>
+  </section>
+
+  <section id="panel-filters" class="tool-panel" aria-label="筛选">
+    <div class="panel-header filter-panel-header">
+      <span>筛选</span>
+      <span>状态 / 标签 / 日期</span>
+    </div>
+    <div class="filter-rows">
+      <div class="filter-row">
+        <div class="filter-label">类型</div>
+        <div id="status-filters" class="chip-row">
+          <button type="button" class="filter-chip active" data-status="">全部</button>
+          <button type="button" class="filter-chip" data-status="done">已完成</button>
+          <button type="button" class="filter-chip" data-status="running">进行中</button>
+          <button type="button" class="filter-chip" data-status="planned">计划中</button>
+          <button type="button" class="filter-chip" data-status="repeated">复刻</button>
+          <button type="button" class="filter-chip" data-status="failed">失败</button>
+          <button type="button" class="filter-chip archive-filter" data-archive="true">已归档</button>
+        </div>
+      </div>
+      <div class="filter-row">
+        <div class="filter-label">标签</div>
+        <div id="tag-filters" class="chip-row"></div>
+      </div>
+      <div class="filter-row">
+        <div class="filter-label">日期</div>
+        <div class="date-range">
+          <label class="sr-only" for="date-from">Date from</label>
+          <input type="date" id="date-from">
+          <span>~</span>
+          <label class="sr-only" for="date-to">Date to</label>
+          <input type="date" id="date-to">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="panel-compare" class="tool-panel" aria-label="Compare">
+    <div class="compare-row">
+      <span id="compare-count">选择 2–4 条实验记录</span>
+      <button type="button" id="compare-go-btn" class="outline" disabled>开始对比</button>
+    </div>
+  </section>
+
+  <section id="pinned-results" class="result-section" aria-label="Pinned experiments" hidden></section>
+
+  <section id="primary-results" class="result-section" aria-label="Current category results"></section>
+  <div id="other-divider" class="other-divider" hidden>
+    <span></span>
+    <strong>其他分类中的匹配记录</strong>
+    <span></span>
+  </div>
+  <section id="other-results" class="result-section" aria-label="Other category matches"></section>
+
+  <div id="no-results" class="empty-state" hidden>
+    <h3>没有匹配的实验记录</h3>
+    <p>请调整搜索条件、筛选条件或分类。</p>
+  </div>
+</section>
+
+<div class="category-modal" id="category-modal" hidden>
+  <form class="category-modal-box" id="category-modal-form">
+    <div class="category-modal-title" id="category-modal-title">Add Category</div>
+    <label>
+      <span>Name</span>
+      <input type="text" id="category-name-input" required maxlength="60">
+    </label>
+    <label>
+      <span>Description</span>
+      <textarea id="category-desc-input" rows="3" maxlength="180"></textarea>
+    </label>
+    <div class="category-modal-actions">
+      <button type="button" class="outline secondary" id="category-modal-cancel">Cancel</button>
+      <button type="submit" id="category-modal-save">Save</button>
+    </div>
+  </form>
+</div>
+
+<style>
+.exp-list-page {
+  width: min(980px, 100%);
+  margin: 0 auto;
+  color: var(--black);
+}
+
+.exp-list-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.exp-list-header h1 {
+  margin: 0;
+  border: 0;
+  padding: 0;
+  font-size: clamp(2rem, 4.5vw, 3rem);
+  line-height: 0.95;
+  /* 字距收窄：0.14em 级字距会把中文（如用户分类名）拉得松散 */
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.exp-list-header span,
+.result-meta,
+.panel-header,
+.filter-label,
+.category-kicker {
+  font-size: 0.78rem;
+  font-weight: 900;
+  /* 字距收窄：中英混排标签在 0.16em 下字距过宽 */
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.exp-list-header span,
+.result-meta,
+.category-kicker {
+  color: var(--text-3);
+}
+
+.search-block {
+  border: 4px solid var(--black);
+  background: var(--white);
+  padding: 0.8rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.04);
+}
+
+.search-block input,
+.date-range input,
+.category-modal input,
+.category-modal textarea {
+  width: 100%;
+  border: 3px solid var(--black);
+  background: var(--white);
+  color: var(--black);
+  font: inherit;
+  font-size: 1rem;
+  padding: 0.65rem 0.8rem;
+  min-height: 44px;
+}
+
+.search-block input:focus,
+.date-range input:focus,
+.category-modal input:focus,
+.category-modal textarea:focus,
+.tool-tab:focus,
+.filter-chip:focus,
+.category-row:focus,
+.category-row button:focus,
+.compare-row button:focus,
+.panel-action:focus,
+.add-category-btn:focus {
+  outline: none;   /* 按用户要求：去掉焦点蓝框 */
+}
+
+.tool-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 4px solid var(--black);
+  margin: 1.35rem 0 0.55rem;
+  background: var(--white);
+}
+
+.tool-tab {
+  min-height: 54px;
+  border: 0;
+  border-right: 4px solid var(--black);
+  background: var(--white);
+  color: var(--black);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: background 180ms ease, color 180ms ease, transform 180ms ease;
+}
+
+.tool-tab:last-child { border-right: 0; }
+.tool-tab:hover { background: var(--surface-2); }
+.tool-tab.active {
+  background: var(--yellow);
+  transform: translateY(-1px);
+}
+
+.tool-panel {
+  display: none;
+  border: 4px solid var(--black);
+  background: var(--white);
+  margin-bottom: 1.2rem;
+}
+
+.tool-panel.active {
+  display: block;
+  animation: panel-in 180ms ease both;
+}
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  min-height: 50px;
+  padding: 0 1rem;
+  border-bottom: 4px solid var(--black);
+  background: var(--surface-2);
+}
+
+.filter-panel-header {
+  margin-bottom: 0;
+}
+
+.panel-action,
+.add-category-btn,
+.compare-row button,
+.category-modal button {
+  min-height: 42px;
+  border: 3px solid var(--black);
+  background: var(--white);
+  color: var(--black);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.75rem;
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.panel-action:hover,
+.add-category-btn:hover,
+.compare-row button:hover:not(:disabled),
+.category-modal button:hover {
+  transform: translate(-1px, -1px);      /* 本体浮起 */
+  box-shadow: 3px 3px 0 var(--black);    /* 浮起阴影 */
+}
+
+.category-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.category-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  min-height: 70px;
+  padding: 0.75rem 1rem;
+  border-bottom: 3px solid var(--black);
+  background: var(--white);
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.category-row:last-child { border-bottom: 0; }
+.category-row.active { background: var(--surface-blue); }
+.category-row.drag-over { box-shadow: inset 8px 0 0 var(--blue); }
+.category-row.default-category { cursor: pointer; }
+
+.category-main {
+  min-width: 0;
+}
+
+.category-title-line {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+
+.category-name {
+  font-size: 1rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  /* 分类名多为中文用户输入，字距收窄 */
+  letter-spacing: 0.04em;
+}
+
+.default-badge {
+  border: 2px solid var(--blue);
+  color: var(--blue);
+  background: var(--white);
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.08rem 0.35rem;
+}
+
+.category-desc {
+  color: var(--text-2);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.category-count {
+  justify-self: end;
+  min-width: 64px;
+  border-left: 8px solid var(--blue);
+  padding-left: 0.7rem;
+  font-weight: 900;
+  text-align: right;
+}
+
+.category-actions {
+  display: none;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.category-list.editing .category-actions {
+  display: flex;
+}
+
+.category-list.editing .category-count {
+  display: none;
+}
+
+.drag-handle {
+  cursor: grab;
+  color: var(--text-3);
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  user-select: none;
+}
+
+.category-row.default-category .drag-handle,
+.category-row.default-category .category-edit,
+.category-row.default-category .category-delete {
+  display: none;
+}
+
+.category-row button {
+  min-height: 36px;
+  border: 2px solid var(--black);
+  background: var(--white);
+  color: var(--black);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.5rem;
+}
+
+.category-delete:hover {
+  background: var(--red);
+  color: var(--white);
+}
+
+.category-editor {
+  border-top: 4px solid var(--black);
+  padding: 0.75rem 1rem;
+  background: var(--surface-2);
+}
+
+.filter-rows {
+  border-left: 8px solid var(--blue);
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  align-items: center;
+  border-bottom: 3px solid var(--black);
+  min-height: 64px;
+}
+
+.filter-row:last-child { border-bottom: 0; }
+
+.filter-label {
+  padding: 0.8rem 1rem;
+  color: var(--text-3);
+}
+
+.chip-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0.65rem 0.85rem;
+  min-width: 0;
+}
+
+.filter-chip {
+  min-height: 36px;
+  border: 3px solid var(--black);
+  background: var(--white);
+  color: var(--black);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.65rem;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.filter-chip:hover { transform: translateY(-1px); }
+.filter-chip.active {
+  background: var(--blue);
+  color: var(--white);
+}
+
+.date-range {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.65rem 0.85rem;
+}
+
+.date-range span {
+  font-weight: 900;
+}
+
+.compare-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.8rem 1rem;
+  background: var(--yellow);
+}
+
+.compare-row button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.result-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.9rem 0 0.75rem;
+}
+
+.result-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.record-card {
+  position: relative;
+  background: var(--white);
+  border: 4px solid var(--black);
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.record-card:hover {
+  transform: translate(-2px, -2px);      /* 本体浮起 */
+  box-shadow: 5px 5px 0 var(--card-shadow);
+}
+
+/* 打开卡片菜单时抑制 hover 上浮：
+   否则卡片带 transform，会改变 fixed 菜单的包含块（从视口变为卡片），
+   导致 JS 按视口坐标 set 的菜单跑偏（卡片视图"菜单无法显示"根因）
+   同时清掉 box-shadow：避免 transform 归零后仍残留悬浮态阴影造成错位 */
+.record-card.menu-open {
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* ============================================================
+   悬浮/按下时"本体浮起、边框钉在原位"：
+   边框改由伪元素绘制，本体 transform 位移时伪元素反向补偿，
+   边框在页面上保持不动（不被"带着浮起来"）。
+   ============================================================ */
+.panel-action, .add-category-btn, .compare-row button,
+.category-modal button, .filter-chip {
+  position: relative;
+  border-color: transparent;   /* 原边框让位给伪元素绘制 */
+}
+.panel-action::before, .add-category-btn::before, .compare-row button::before,
+.category-modal button::before, .filter-chip::before {
+  content: "";
+  position: absolute;
+  inset: -3px;                 /* 外扩到元素原边框位置（border 占位外侧），避免内缩重叠 */
+  border: 3px solid var(--black);
+  box-sizing: border-box;
+  pointer-events: none;
+  transition: transform 160ms ease;   /* 与本体 160ms 过渡一致，悬浮/回位同步 */
+}
+/* filter-chip 本体 transform 无过渡（瞬间），边框也同步瞬间，避免不同步位移 */
+.filter-chip::before {
+  transition: transform 0s;
+}
+/* hover 位移时的反向补偿：边框保持原位 */
+.panel-action:hover::before,
+.add-category-btn:hover::before,
+.compare-row button:hover:not(:disabled)::before,
+.category-modal button:hover::before { transform: translate(1px, 1px); }
+.filter-chip:hover::before { transform: translateY(1px); }
+
+.record-card.selected {
+  border-color: var(--red);   /* 卡片整体悬浮，边框跟随元素（不钉住） */
+  box-shadow: 5px 5px 0 var(--red);
+}
+
+/* 索引行在 compare 模式下被选中的样式：黄底 + 左侧红色条（醒目且与卡片红边呼应） */
+.record-row.selected {
+  background: var(--yellow);
+  box-shadow: inset 4px 0 0 var(--red);
+}
+.record-row.selected:hover {
+  background: var(--yellow);
+  box-shadow: inset 4px 0 0 var(--red);   /* 选中行的 hover 保持红条（不被 hover 黑条覆盖） */
+}
+
+/* ============================================================
+   Categories / Filters / Compare 标签（tool-tab）：
+   悬浮上浮，分隔线（右边界）钉在原位（伪元素绘制 + 反向补偿）
+   ============================================================ */
+.tool-tab {
+  position: relative;
+  border-right: 0;               /* 右分隔线改由 ::before 绘制 */
+}
+.tool-tab::before {
+  content: "";
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: var(--black);
+  pointer-events: none;
+  transition: transform 180ms ease;   /* 与本体 transform 过渡(180ms)一致，避免不同步位移 */
+}
+.tool-tab:last-child::before { content: none; }   /* 最后一个标签无右分隔线 */
+/* 用户要求：标签不悬浮、选中态不上浮（demo 区 transform:none 生效），
+   分隔线保持原位闭合，无需反向补偿 */
+
+/* ============================================================
+   卡片视图 / 索引行 切换按钮（view-toggle）：
+   悬浮上浮，分隔线（左边界）钉在原位
+   ============================================================ */
+.view-toggle button {
+  position: relative;
+  border-left: 0;                /* 左分隔线改由 ::before 绘制 */
+}
+.view-toggle button::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--black);
+  pointer-events: none;
+  transition: transform 0s;   /* 本体 transform 无过渡（瞬间），边框同步瞬间，避免不同步位移 */
+}
+.view-toggle button:first-child::before { content: none; }  /* 第一个按钮无左分隔线 */
+/* 用户要求：视图切换按钮不要悬停悬浮 */
+
+.record-card.other-result {
+  background: var(--white);
+}
+
+.record-card.other-result .header-exp {
+  background: var(--black);
+  padding-left: 2.25rem;
+}
+
+.record-card.other-result .header-exp::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 18px;
+  background: var(--blue);
+}
+
+.pinned-card {
+  border-left-color: var(--red);
+}
+
+.card-header {
+  display: flex;
+  border-bottom: 4px solid var(--black);
+  min-height: 28px;
+}
+
+.header-exp {
+  flex: 1;
+  min-width: 0;
+  background: var(--blue);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  padding-left: 10px;
+  font-family: "Courier New", monospace;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  position: relative;
+}
+
+.header-status {
+  width: 82px;
+  background: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  border-left: 4px solid var(--black);
+}
+
+.card-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+}
+
+.main-content {
+  position: relative;
+  min-height: 92px;
+  padding: 1rem 1rem 0.85rem;
+}
+
+.black-overhang {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 48px;
+  height: 10px;
+  background: var(--black);
+}
+
+.content-title {
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.32;
+  margin: 0 0 0.65rem;
+}
+
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.tag {
+  border: 1px solid var(--blue);
+  color: var(--text-2);
+  padding: 0.08rem 0.4rem;
+  font-size: 0.62rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.sidebar {
+  border-left: 4px solid var(--black);
+  align-self: start;
+}
+
+.date-block {
+  padding: 0.45rem 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 900;
+  border-bottom: 4px solid var(--black);
+  background: var(--yellow);
+}
+
+.person-box {
+  display: flex;
+  min-height: 34px;
+  border-bottom: 4px solid var(--black);
+  background: var(--white);
+}
+
+.person-accent {
+  width: 8px;
+  background: var(--red);
+  border-right: 2px solid var(--black);
+}
+
+.person-name {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.card-menu-btn {
+  margin-left: auto;
+  align-self: stretch;
+  min-width: 36px;
+  border: 0;
+  border-left: 2px solid rgba(255,255,255,0.35);
+  background: transparent;
+  color: var(--white);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.card-menu-dropdown {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 30;
+  background: var(--white);
+  color: var(--black);
+  border: 3px solid var(--black);
+  box-shadow: 4px 4px 0 var(--black);
+  min-width: 150px;
+  padding: 0.2rem 0;
+}
+
+.card-menu-dropdown[hidden] {
+  display: none;
+}
+
+.card-menu-item {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--black);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-align: left;
+  text-transform: uppercase;
+  padding: 0.45rem 0.75rem;
+}
+
+.card-menu-item:hover {
+  background: var(--black);
+  color: var(--white);
+}
+
+.other-divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.5rem 0 1rem;
+}
+
+.other-divider[hidden] { display: none; }
+.other-divider span { height: 4px; background: var(--black); }
+.other-divider strong {
+  color: var(--text-3);
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.empty-state {
+  border: 4px solid var(--black);
+  background: var(--white);
+  padding: 1.2rem;
+  text-align: center;
+}
+
+.empty-state h3 {
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.empty-state p {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.category-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  background: rgba(0,0,0,0.38);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.category-modal[hidden] {
+  display: none;
+}
+
+.category-modal-box {
+  width: min(430px, 100%);
+  border: 4px solid var(--black);
+  background: var(--white);
+  box-shadow: 7px 7px 0 var(--black);
+  padding: 1rem;
+}
+
+.category-modal-title {
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 0.85rem;
+}
+
+.category-modal label {
+  display: block;
+  margin-bottom: 0.8rem;
+}
+
+/* Categorize 模式会把这些输入框的 label 设为 hidden 关闭。
+   必须显式覆盖 display，否则 .category-modal label{display:block}
+   会压过浏览器 [hidden] 默认的 display:none，让关闭的输入框仍显示 */
+.category-modal label[hidden] {
+  display: none;
+}
+
+.category-modal label span {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 0.3rem;
+}
+
+.category-modal textarea {
+  resize: vertical;
+  min-height: 96px;
+}
+
+.category-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.assign-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.9rem;
+}
+
+.assign-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0;
+  min-height: 42px;
+  border: 2px solid var(--black);
+  padding: 0.35rem 0.55rem;
+  cursor: pointer;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.assign-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--blue);
+}
+
+/* 勾选行（分类标题）：
+   用更高特异性覆盖 .category-modal label / .category-modal label span，
+   确保 assign-row 保持 flex 布局、标题文字正常显示（修复标题看不见） */
+.category-modal .assign-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0.35rem 0.55rem;
+}
+.category-modal .assign-row span {
+  display: block;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  color: var(--black);
+  text-transform: none;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 720px) {
+  /* 竖屏：标题/搜索框/工具按钮与面板全部折叠进右上角菜单栏，经悬浮窗访问 */
+  .exp-list-header, .search-block, .tool-tabs, .tool-panel.active { display: none; }
+  .tool-tab { min-height: 40px; }
+  .filter-row { grid-template-columns: 1fr; }
+  .filter-label { padding-bottom: 0; }
+  .date-range { grid-template-columns: 1fr; }
+  .date-range span { display: none; }
+  .card-body { grid-template-columns: 1fr; }
+  .sidebar {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    border-left: 0;
+    border-top: 4px solid var(--black);
+  }
+  .date-block,
+  .person-box { border-bottom: 0; border-right: 4px solid var(--black); }
+  .date-block:last-child { border-right: 0; }
+  .result-meta { flex-direction: column; gap: 0.2rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-panel.active,
+  .record-card,
+  .tool-tab,
+  .filter-chip,
+  .panel-action,
+  .add-category-btn,
+  .compare-row button,
+  .category-modal button {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* Demo fidelity pass: keep the real data logic, restore the compact visual rhythm. */
+#fragment-mount:has(.exp-list-page) {
+  scrollbar-gutter: stable;
+  max-width: none;
+  padding: 0;
+}
+
+.filter-chip.archive-filter.active { background:var(--surface-2); color:var(--text-2); }
+.record-card.archived-record { background:var(--surface-2); }
+.record-card.archived-record .header-exp { background:#555; }
+.record-row.archived-record { background:var(--surface-2); }
+.archive-mark {
+  display:inline-block; margin-left:0.4rem; padding:0.05rem 0.28rem;
+  border:1px solid currentColor; font-size:0.58rem; letter-spacing:0.06em;
+}
+.row-archive { color:var(--text-2); font-size:0.62rem; font-weight:900; letter-spacing:0.06em; }
+.row-dot.archived-dot { border-radius:0; background:var(--surface-2); box-shadow:2px 2px 0 #777; }
+
+#fragment-mount:has(.exp-list-page) > .fragment-content {
+  width: min(688px, 100%);
+  padding: 22px 14px 48px;
+}
+
+.exp-list-page {
+  width: min(660px, 100%) !important;
+}
+
+.exp-list-header {
+  justify-content: flex-start;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.exp-list-header h1 {
+  font-size: 1.7rem !important;
+  line-height: 1.08;
+  letter-spacing: 0.08em;
+}
+
+.exp-list-header span,
+.result-meta,
+.panel-header,
+.filter-label,
+.category-kicker {
+  font-size: 0.72rem;
+  letter-spacing: 1.2px;
+}
+
+.search-block {
+  padding: 8px;
+  margin-bottom: 14px;
+  box-shadow: none;
+}
+
+.search-block input {
+  border: none;
+  font-size: 0.92rem;
+  padding: 0 0.65rem;
+  min-height: 22px;
+}
+
+/* 聚焦反馈：去掉蓝色内框（outline），改为外边框黑→蓝 */
+.search-block:focus-within {
+  border-color: var(--blue);
+}
+
+.search-block input:focus {
+  outline: none;
+}
+
+.date-range input,
+.category-modal input,
+.category-modal textarea {
+  font-size: 0.92rem;
+  padding: 0.5rem 0.65rem;
+  min-height: 40px;
+}
+
+.tool-tabs {
+  margin: 0 0 10px;
+}
+
+.tool-tab {
+  min-height: 38px !important;
+  padding: 8px 6px !important;
+  font-size: 0.88rem !important;
+  line-height: 1.1;
+  letter-spacing: 0.1em;
+  box-shadow: none;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.tool-tab:hover {
+  background: var(--black);
+  color: var(--white);
+}
+
+.tool-tab.active:hover {
+  background: var(--black);
+  color: var(--white);
+}
+
+.tool-tab.active {
+  color: var(--black);
+  transform: none;
+}
+
+/* 已应用筛选：即使收起面板，也把筛选维度留在按钮上。 */
+.tool-tab.filter-active,
+.tool-tab.filter-active:hover {
+  background: var(--blue);
+  color: var(--white);
+}
+
+.tool-panel {
+  margin-top: -6px;
+  margin-bottom: 10px;
+}
+
+.tool-panel.active {
+  animation: panel-in 180ms cubic-bezier(.16, 1, .3, 1) both;
+}
+
+.panel-header {
+  min-height: 0 !important;
+  padding: 7px 10px !important;
+  gap: 10px;
+  border-bottom-width: 3px;
+  background: var(--off-white);
+}
+
+.panel-action,
+.add-category-btn,
+.compare-row button,
+.category-modal button {
+  min-height: 0;
+  border-width: 2px;
+  padding: 3px 8px;
+  font-size: 0.68rem;
+  line-height: 1.1;
+  letter-spacing: 0.08em;
+  box-shadow: none;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.panel-action:hover,
+.panel-action.active,
+.add-category-btn:hover,
+.compare-row button:hover:not(:disabled),
+.category-modal button:hover {
+  background: var(--black);
+  color: var(--white);
+  transform: none;
+  box-shadow: none;
+}
+
+.category-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  padding: 8px;
+}
+
+.category-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  min-height: 0 !important;
+  padding: 8px 10px !important;
+  border: 3px solid var(--black);
+}
+
+.category-row:last-child {
+  border-bottom: 3px solid var(--black);
+}
+
+.category-row.active {
+  background: var(--yellow);
+}
+
+.category-title-line {
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+.category-name {
+  font-size: 0.82rem;
+  letter-spacing: 0.8px;
+}
+
+.default-badge {
+  border-color: var(--black);
+  color: var(--black);
+  font-size: 0.56rem;
+  line-height: 1.3;
+  letter-spacing: 0.8px;
+  padding: 0 5px;
+}
+
+.category-desc {
+  display: block;
+  margin-top: 2px;
+  color: var(--black);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.3;
+  opacity: 0.55;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.category-count {
+  min-width: 0;
+  border-left: 0;
+  padding-left: 0;
+  font-family: "Courier New", monospace;
+  font-size: 0.9rem;
+}
+
+.category-list.editing .category-count {
+  display: block;
+}
+
+.category-actions {
+  gap: 4px;
+}
+
+.drag-handle {
+  font-size: 0.78rem;
+  letter-spacing: -2px;
+}
+
+.category-row button {
+  width: 26px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  font-size: 0.68rem;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.category-row button:hover,
+.category-delete:hover {
+  background: var(--black);
+  color: var(--white);
+}
+
+.category-editor {
+  border-top-width: 3px;
+  padding: 8px;
+  background: var(--off-white);
+}
+
+.category-editor .add-category-btn {
+  width: 100%;
+}
+
+.filter-rows {
+  border-left: 0;
+  margin-top: -3px;
+}
+
+.filter-row {
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0 !important;
+  padding: 8px 10px !important;
+  border-bottom-width: 2px;
+}
+
+.filter-row:nth-child(1) { border-left: 6px solid var(--blue); }
+.filter-row:nth-child(2) { border-left: 6px solid var(--yellow); }
+.filter-row:nth-child(3) { border-left: 6px solid var(--red); }
+
+.filter-label {
+  padding: 0;
+  color: var(--black);
+  opacity: 0.68;
+}
+
+.chip-row {
+  gap: 6px;
+  padding: 0;
+}
+
+.filter-chip {
+  min-height: 0 !important;
+  border-width: 2px;
+  padding: 0.18em 0.55em;
+  font-size: 0.68rem !important;
+  letter-spacing: 0.04em;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.filter-chip:hover {
+  background: var(--black);
+  color: var(--white);
+  transform: none;
+}
+
+.filter-row:nth-child(2) .filter-chip.active {
+  background: var(--yellow);
+  color: var(--black);
+}
+
+.date-range {
+  gap: 6px;
+  padding: 0;
+}
+
+.date-range input {
+  border-width: 2px;
+  font-size: 0.8rem;
+  padding: 0.35rem 0.45rem;
+  min-height: 34px;
+}
+
+.compare-row {
+  justify-content: space-between;
+  padding: 8px 10px;
+}
+
+.result-meta {
+  margin: 12px 0 8px;
+  opacity: 0.58;
+}
+
+.result-section {
+  gap: 0;
+}
+
+.record-card {
+  margin-bottom: 0.8rem;
+}
+
+.record-card.other-result {
+  background: var(--surface-yellow);
+}
+
+.record-card.other-result .header-exp {
+  padding-left: 24px;
+}
+
+.record-card.other-result .header-exp::before {
+  width: 12px;
+}
+
+.card-header {
+  height: 28px !important;
+}
+
+.header-exp {
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.header-status {
+  width: 70px;
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+}
+
+.card-body {
+  display: flex;
+}
+
+.main-content {
+  flex: 1;
+  min-height: 0;
+  padding: 14px !important;
+}
+
+.black-overhang {
+  width: 45px;
+}
+
+.content-title {
+  font-size: 0.95rem;
+  line-height: 1.3;
+  margin-bottom: 8px;
+}
+
+.tags-container {
+  gap: 4px;
+}
+
+.tag {
+  padding: 1px 6px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.sidebar {
+  width: 88px;
+  display: flex;
+  flex-direction: column;
+}
+
+.date-block {
+  padding: 5px 7px;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.person-box {
+  height: 30px;
+  min-height: 30px;
+}
+
+.person-name {
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.other-divider {
+  gap: 10px;
+  margin: 16px 0 10px;
+}
+
+.other-divider strong {
+  font-size: 0.68rem;
+  letter-spacing: 1.2px;
+}
+
+.category-modal {
+  background: rgba(0,0,0,.45);
+}
+
+.category-modal-box {
+  width: min(360px, 92vw);
+  border-width: 5px;
+  box-shadow: 10px 10px 0 var(--shadow-lg);
+  padding: 0;
+}
+
+.category-modal-title {
+  border-bottom: 3px solid var(--black);
+  background: var(--yellow);
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  letter-spacing: 1px;
+  margin-bottom: 0;
+}
+
+.category-modal label {
+  margin: 0;
+  padding: 12px 12px 0;
+}
+
+.category-modal-actions {
+  gap: 8px;
+  padding: 12px;
+}
+</style>
+
+<script>
+(function () {
+  "use strict";
+
+  var initialData = {
+    experiments: {{ experiments|tojson }},
+    pinnedIds: {{ pinned_ids|tojson }},
+    collections: {{ (collections or {})|tojson }},
+    collectionMeta: {{ (collection_meta or {})|tojson }},
+    categoryPinned: {{ (category_pinned or {})|tojson }}
+  };
+
+  var state = {
+    experiments: initialData.experiments || [],
+    pinnedIds: initialData.pinnedIds || [],
+    collections: initialData.collections || {},
+    collectionMeta: initialData.collectionMeta || {},
+    categoryPinned: initialData.categoryPinned || {},
+    currentCategory: "__all__",
+    activePanel: new URLSearchParams(window.location.search).get("panel") || "",
+    editingCategories: false,
+    compareMode: false,
+    compareSelected: [],
+    modalMode: "add",
+    modalCategory: null,
+    draggedCategory: null,
+    viewMode: "rows"  // 'rows' | 'cards'，由 initViewToggle 从 sessionStorage 恢复
+  };
+
+  var els = {};
+
+  function init() {
+    cacheEls();
+    bindEvents();
+    setActivePanel(state.activePanel);
+    renderCategories();
+    populateTags();
+    renderResults();
+  }
+
+  function cacheEls() {
+    els.search = document.getElementById("search-input");
+    els.listContext = document.getElementById("list-context");
+    els.pinned = document.getElementById("pinned-results");
+    els.primary = document.getElementById("primary-results");
+    els.other = document.getElementById("other-results");
+    els.otherDivider = document.getElementById("other-divider");
+    els.noResults = document.getElementById("no-results");
+    els.categoryList = document.getElementById("category-list");
+    els.categoryEditor = document.getElementById("category-editor");
+    els.categoryEditToggle = document.getElementById("category-edit-toggle");
+    els.modal = document.getElementById("category-modal");
+    els.modalForm = document.getElementById("category-modal-form");
+    els.modalTitle = document.getElementById("category-modal-title");
+    els.modalName = document.getElementById("category-name-input");
+    els.modalDesc = document.getElementById("category-desc-input");
+    els.compareCount = document.getElementById("compare-count");
+    els.compareGoBtn = document.getElementById("compare-go-btn");
+  }
+
+  function bindEvents() {
+    document.querySelectorAll(".tool-tab").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        setActivePanel(state.activePanel === btn.dataset.panel ? "" : btn.dataset.panel);
+      });
+    });
+
+    if (els.search) els.search.addEventListener("input", renderResults);
+    document.querySelectorAll("#status-filters .filter-chip").forEach(function (chip) {
+      chip.addEventListener("click", function () {
+        document.querySelectorAll("#status-filters .filter-chip").forEach(function (c) { c.classList.remove("active"); });
+        chip.classList.add("active");
+        renderResults();
+      });
+    });
+    ["date-from", "date-to"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener("change", renderResults);
+    });
+
+    els.categoryEditToggle.addEventListener("click", toggleCategoryEdit);
+    document.getElementById("add-category-btn").addEventListener("click", function () { openCategoryModal("add"); });
+    document.getElementById("category-modal-cancel").addEventListener("click", closeCategoryModal);
+    els.modal.addEventListener("click", function (e) { if (e.target === els.modal) closeCategoryModal(); });
+    els.modalForm.addEventListener("submit", saveCategoryModal);
+
+    els.compareGoBtn.addEventListener("click", goCompare);
+
+    document.addEventListener("click", function (e) {
+      if (!e.target.closest(".card-menu-btn")) closeCardMenus();
+    });
+    // 分类和筛选是临时面板；对比需要持续保留，便于连续勾选多条记录。
+    document.addEventListener("click", function (e) {
+      if (!state.activePanel || state.activePanel === "compare" || e.target.closest(".tool-tabs, .tool-panel")) return;
+      if (els.modal && !els.modal.hidden && e.target.closest("#category-modal")) return;
+      setActivePanel("");
+    });
+    // fixed 菜单不随容器滚动：任何滚动即关闭，避免菜单漂移
+    document.addEventListener("scroll", function () { closeCardMenus(); }, true);
+
+    initViewToggle();
+  }
+
+  function initViewToggle() {
+    var stored = null;
+    try { stored = sessionStorage.getItem("exdiary_list_view"); } catch (e) {}
+    state.viewMode = stored === "cards" ? "cards" : "rows";
+    document.querySelectorAll("#view-toggle button").forEach(function (btn) {
+      btn.classList.toggle("active", btn.dataset.view === state.viewMode);
+      btn.setAttribute("aria-pressed", btn.dataset.view === state.viewMode);
+      btn.addEventListener("click", function () {
+        if (state.compareMode) return;  // compare 勾选依赖卡片视图
+        state.viewMode = btn.dataset.view;
+        try { sessionStorage.setItem("exdiary_list_view", state.viewMode); } catch (e) {}
+        document.querySelectorAll("#view-toggle button").forEach(function (b) {
+          var on = b.dataset.view === state.viewMode;
+          b.classList.toggle("active", on);
+          b.setAttribute("aria-pressed", on);
+        });
+        renderResults();
+      });
+    });
+  }
+
+  function setActivePanel(panel) {
+    state.activePanel = ["categories", "filters", "compare"].indexOf(panel) >= 0 ? panel : "";
+    state.compareMode = state.activePanel === "compare";
+    if (!state.compareMode) state.compareSelected = [];
+    document.querySelectorAll(".tool-tab").forEach(function (btn) {
+      btn.classList.toggle("active", btn.dataset.panel === state.activePanel);
+      btn.setAttribute("aria-expanded", btn.dataset.panel === state.activePanel ? "true" : "false");
+    });
+    document.querySelectorAll(".tool-panel").forEach(function (panelEl) {
+      panelEl.classList.toggle("active", panelEl.id === "panel-" + state.activePanel);
+    });
+    updateCompareBar();
+    syncCompareCards();
+  }
+
+  function updateFilterTab() {
+    var button = document.querySelector('.tool-tab[data-panel="filters"]');
+    if (!button) return;
+    var labels = [];
+    var statusChip = document.querySelector("#status-filters .filter-chip.active");
+    if (statusChip && (statusChip.dataset.status || statusChip.dataset.archive === "true")) {
+      labels.push((statusChip.textContent || "").trim());
+    }
+    if (document.querySelectorAll("#tag-filters .filter-chip.active").length) labels.push("TAG");
+    var dateFrom = (document.getElementById("date-from") || {}).value || "";
+    var dateTo = (document.getElementById("date-to") || {}).value || "";
+    if (dateFrom || dateTo) labels.push(dateFrom && dateTo ? dateFrom + "~" + dateTo : (dateFrom || dateTo));
+    button.textContent = labels.length ? "筛选 · " + labels.join(" · ") : "筛选";
+    button.classList.toggle("filter-active", labels.length > 0);
+    button.title = labels.length ? "当前筛选：" + labels.join("、") : "筛选";
+  }
+
+  function getCategoryRows() {
+    function activeCount(ids) {
+      return (ids || []).filter(function (id) {
+        return state.experiments.some(function (exp) { return exp.id === id && !isArchived(exp); });
+      }).length;
+    }
+    var rows = [{
+      name: "__all__",
+      label: "全部实验",
+      description: "Default scope across every experiment record.",
+      count: state.experiments.filter(function (exp) { return !isArchived(exp); }).length,
+      isDefault: true
+    }];
+    Object.keys(state.collections || {}).forEach(function (name) {
+      rows.push({
+        name: name,
+        label: name,
+        description: (state.collectionMeta[name] && state.collectionMeta[name].description) || "No description yet.",
+        count: activeCount(state.collections[name]),
+        isDefault: false
+      });
+    });
+    return rows;
+  }
+
+  function renderCategories() {
+    els.categoryList.classList.toggle("editing", state.editingCategories);
+    els.categoryList.innerHTML = getCategoryRows().map(function (row) {
+      var draggable = state.editingCategories && !row.isDefault ? " draggable=\"true\"" : "";
+      return "" +
+        "<div class=\"category-row " + (row.isDefault ? "default-category " : "") + (state.currentCategory === row.name ? "active" : "") + "\" tabindex=\"0\" data-category=\"" + escAttr(row.name) + "\"" + draggable + ">" +
+          "<div class=\"category-main\">" +
+            "<div class=\"category-title-line\">" +
+              "<span class=\"category-name\">" + escHtml(row.label) + "</span>" +
+              (row.isDefault ? "<span class=\"default-badge\">Default</span>" : "") +
+            "</div>" +
+            "<div class=\"category-desc\">" + escHtml(row.description) + "</div>" +
+          "</div>" +
+          "<div class=\"category-count\">" + row.count + "</div>" +
+          "<div class=\"category-actions\">" +
+            "<span class=\"drag-handle\" title=\"Drag to reorder\">|||</span>" +
+            "<button type=\"button\" class=\"category-edit\" title=\"Rename\">T</button>" +
+            "<button type=\"button\" class=\"category-delete\" title=\"Delete\">X</button>" +
+          "</div>" +
+        "</div>";
+    }).join("");
+
+    els.categoryList.querySelectorAll(".category-row").forEach(function (rowEl) {
+      rowEl.addEventListener("click", function (e) {
+        if (e.target.closest("button") || e.target.closest(".drag-handle")) return;
+        state.currentCategory = rowEl.dataset.category;
+        renderCategories();
+        renderResults();
+        if (!state.editingCategories) setActivePanel("");
+      });
+      rowEl.addEventListener("keydown", function (e) {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        state.currentCategory = rowEl.dataset.category;
+        renderCategories();
+        renderResults();
+        if (!state.editingCategories) setActivePanel("");
+      });
+      var editBtn = rowEl.querySelector(".category-edit");
+      var deleteBtn = rowEl.querySelector(".category-delete");
+      if (editBtn) editBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        openCategoryModal("edit", rowEl.dataset.category);
+      });
+      if (deleteBtn) deleteBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        deleteCategory(rowEl.dataset.category);
+      });
+      bindDrag(rowEl);
+    });
+  }
+
+  function bindDrag(rowEl) {
+    rowEl.addEventListener("dragstart", function (e) {
+      if (!state.editingCategories || rowEl.dataset.category === "__all__") {
+        e.preventDefault();
+        return;
+      }
+      state.draggedCategory = rowEl.dataset.category;
+      e.dataTransfer.effectAllowed = "move";
+    });
+    rowEl.addEventListener("dragover", function (e) {
+      if (!state.draggedCategory || rowEl.dataset.category === "__all__") return;
+      e.preventDefault();
+      rowEl.classList.add("drag-over");
+    });
+    rowEl.addEventListener("dragleave", function () {
+      rowEl.classList.remove("drag-over");
+    });
+    rowEl.addEventListener("drop", function (e) {
+      e.preventDefault();
+      rowEl.classList.remove("drag-over");
+      reorderCategory(state.draggedCategory, rowEl.dataset.category);
+      state.draggedCategory = null;
+    });
+  }
+
+  function toggleCategoryEdit() {
+    state.editingCategories = !state.editingCategories;
+    els.categoryEditToggle.textContent = state.editingCategories ? "完成" : "编辑";
+    els.categoryEditToggle.classList.toggle("active", state.editingCategories);
+    els.categoryEditor.hidden = !state.editingCategories;
+    renderCategories();
+  }
+
+  function openCategoryModal(mode, name) {
+    state.modalMode = mode;
+    state.modalCategory = name || null;
+    els.modalTitle.textContent = mode === "edit" ? "编辑分类" : "新建分类";
+    els.modalName.value = mode === "edit" ? name : "";
+    els.modalDesc.value = mode === "edit" && state.collectionMeta[name] ? state.collectionMeta[name].description || "" : "";
+    els.modalName.required = true;
+    els.modalName.disabled = false;
+    els.modalDesc.disabled = false;
+    els.modal.hidden = false;
+    setTimeout(function () { els.modalName.focus(); }, 0);
+  }
+
+  function deleteCategory(name) {
+    if (!name || name === "__all__") return;
+    if (!confirm("删除分类“" + name + "”？实验记录仍会保留在“全部实验”中。")) return;
+    fetch("/api/categories/" + encodeURIComponent(name), { method: "DELETE" })
+      .then(function (r) { return r.json(); })
+      .then(function (result) {
+        if (!result.ok) throw new Error(result.error || "Failed");
+        if (window.ExdiarySound) window.ExdiarySound.play("delete");
+        if (state.currentCategory === name) state.currentCategory = "__all__";
+        return refreshCategories();
+      })
+      .catch(function (err) { alert(err.message || "Failed"); });
+  }
+
+  function reorderCategory(fromName, toName) {
+    if (!fromName || !toName || fromName === toName || toName === "__all__") return;
+    var names = Object.keys(state.collections);
+    var fromIdx = names.indexOf(fromName);
+    var toIdx = names.indexOf(toName);
+    if (fromIdx < 0 || toIdx < 0) return;
+    names.splice(toIdx, 0, names.splice(fromIdx, 1)[0]);
+    var next = {};
+    names.forEach(function (name) { next[name] = state.collections[name]; });
+    state.collections = next;
+    renderCategories();
+    fetch("/api/categories/reorder", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({names: names})
+    }).then(function (r) { return r.json(); })
+      .then(function (result) {
+        if (!result.ok) throw new Error(result.error || "Failed");
+      })
+      .catch(function (err) {
+        alert(err.message || "Failed");
+        refreshCategories();
+      });
+  }
+
+  function refreshCategories(selectName) {
+    return fetch("/api/categories")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        state.collections = data.collections || {};
+        state.collectionMeta = data.meta || {};
+        state.categoryPinned = data.category_pinned || {};
+        if (selectName) state.currentCategory = selectName;
+        renderCategories();
+        renderResults();
+      });
+  }
+
+  function populateTags() {
+    var tagSet = {};
+    state.experiments.forEach(function (exp) {
+      (exp.tags || []).forEach(function (tag) { tagSet[tag] = true; });
+    });
+    var container = document.getElementById("tag-filters");
+    container.innerHTML = Object.keys(tagSet).sort().map(function (tag) {
+      return "<button type=\"button\" class=\"filter-chip\" data-tag=\"" + escAttr(tag) + "\">" + escHtml(tag) + "</button>";
+    }).join("");
+    container.querySelectorAll(".filter-chip").forEach(function (chip) {
+      chip.addEventListener("click", function () {
+        chip.classList.toggle("active");
+        renderResults();
+      });
+    });
+  }
+
+  function renderResults() {
+    updateFilterTab();
+    var filtered = getFilteredExperiments();
+    var primary = [];
+    var other = [];
+    var primaryIdSet = {};
+    var useOther = hasActiveSearchOrFilters() && state.currentCategory !== "__all__";
+
+    filtered.forEach(function (exp) {
+      if (isInCurrentCategory(exp)) {
+        primary.push(exp);
+        primaryIdSet[exp.id] = true;
+      } else if (useOther && belongsToAnyCategory(exp)) {
+        other.push(exp);
+      }
+    });
+
+    if (state.currentCategory === "__all__") {
+      primary = filtered;
+      other = [];
+    }
+
+    primary = sortExperiments(primary, true);
+    other = sortExperiments(other);
+
+    // 置顶实验从时间线中抽出：独立放在时间线上方，不缩进、不分组
+    var pinnedIds = activePinnedIds();
+    var pinnedExps = [];
+    var timelineExps = [];
+    primary.forEach(function (exp) {
+      if (pinnedIds.indexOf(exp.id) >= 0) pinnedExps.push(exp);
+      else timelineExps.push(exp);
+    });
+    pinnedExps.sort(function (a, b) {
+      var ai = pinnedIds.indexOf(a.id);
+      var bi = pinnedIds.indexOf(b.id);
+      return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
+    });
+    timelineExps = sortExperiments(timelineExps, false);
+
+    // 视图由 viewMode 决定（compare 模式保持当前视图：索引行就按行勾选，不强制切卡片）
+    var useCards = state.viewMode === "cards";
+    var renderItem = useCards ? renderCard : renderRow;
+    els.pinned.innerHTML = pinnedExps.map(function (exp) { return renderItem(exp, false); }).join("");
+    els.pinned.hidden = pinnedExps.length === 0;
+    // 主结果区：按开始日期分组渲染（相同日期的实验放一块，组头标日期/周几/相对时间）
+    els.primary.innerHTML = renderGrouped(timelineExps, false);
+    // 其他分类匹配区：保持原样
+    if (other.length) {
+      els.other.innerHTML = other.map(function (exp) { return renderItem(exp, true); }).join("");
+    } else {
+      els.other.innerHTML = "";
+    }
+    els.otherDivider.hidden = other.length === 0;
+    els.noResults.hidden = primary.length + other.length > 0;
+    if (useCards) bindCards(); else bindRows();
+    updateMeta(primary.length, other.length);
+    syncCompareCards();
+  }
+
+  // ---- 按开始日期分组 ----
+
+  function groupByDate(items) {
+    var groups = [];
+    var map = {};
+    items.forEach(function (exp) {
+      var key = normalizeDate(exp.date) || "__nodate__";
+      if (!map[key]) { map[key] = { key: key, exps: [] }; groups.push(map[key]); }
+      map[key].exps.push(exp);
+    });
+    // 未标注日期的组放最上面（用户要求），其余组按日期倒序
+    groups.sort(function (a, b) {
+      if (a.key === "__nodate__") return -1;
+      if (b.key === "__nodate__") return 1;
+      return String(b.key).localeCompare(String(a.key));
+    });
+    return groups;
+  }
+
+  function renderGrouped(exps, isOther) {
+    var useCards = state.viewMode === "cards";   // compare 保持当前视图
+    var renderItem = useCards ? renderCard : renderRow;
+    return groupByDate(exps).map(function (g) {
+      // 未标注日期默认收起，其余组默认展开
+      var collapsed = g.key === "__nodate__";
+      var head = dateGroupHeadHtml(g.key === "__nodate__" ? "" : g.key, collapsed);
+      return head +
+        '<div class="date-group-body"><div class="date-group-inner">' +
+        g.exps.map(function (exp) { return renderItem(exp, isOther); }).join("") +
+        "</div></div>";
+    }).join("");
+  }
+
+  // 组头日期标签：小色块（=展开/收起按钮，黄↔红）+ "MM-DD 周X · 相对时间" + 完整日期
+  function dateGroupHeadHtml(dateStr, collapsed) {
+    var cls = "date-group-head" + (collapsed ? " collapsed" : "");
+    var marker = '<span class="date-marker" role="button" tabindex="0" title="展开/收起本组" onclick="toggleDateGroup(this)"></span>';
+    var head = '<div class="' + cls + '">' + marker;
+    if (!dateStr) {
+      return head + '<span class="date-text">未标注日期</span></div>';
+    }
+    var d = new Date(dateStr + "T00:00:00");
+    if (isNaN(d.getTime())) {
+      return head + '<span class="date-text">' + escHtml(dateStr) + "</span></div>";
+    }
+    var mmdd = String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    var week = "周" + "日一二三四五六".charAt(d.getDay());
+    return head +
+      '<span class="date-text">' + escHtml(mmdd) + " " + week + " · " + escHtml(relativeTime(d)) + "</span>" +
+      '<span class="date-full">' + escHtml(dateStr.slice(0, 10)) + "</span></div>";
+  }
+
+  // 收起/展开日期组：切换组头 collapsed 状态（色块点击触发，颜色与内容动画由 CSS 负责）
+  window.toggleDateGroup = function (markerEl) {
+    var head = markerEl && markerEl.parentElement;
+    if (!head || !head.classList || !head.classList.contains("date-group-head")) return;
+    head.classList.toggle("collapsed");
+  };
+
+  // 键盘支持（色块聚焦时 Enter/空格 切换）—— 全局委托，避免重复注册
+  if (!window.__dateGroupKeydown) {
+    window.__dateGroupKeydown = function (e) {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      var m = e.target && e.target.closest ? e.target.closest(".date-marker") : null;
+      if (m) { e.preventDefault(); toggleDateGroup(m); }
+    };
+    document.addEventListener("keydown", window.__dateGroupKeydown);
+  }
+
+  // 相对时间：今天/昨天/N天前/上周/上上周/三周前/一个月前/.../一年前/N年前
+  function relativeTime(date) {
+    var now = new Date();
+    now.setHours(0, 0, 0, 0);
+    var target = new Date(date);
+    target.setHours(0, 0, 0, 0);
+    var days = Math.round((now.getTime() - target.getTime()) / 86400000);
+    if (days <= 0) return "今天";
+    if (days === 1) return "昨天";
+    if (days < 7) return days + " 天前";
+    if (days < 14) return "上周";
+    if (days < 21) return "上上周";
+    if (days < 30) return "三周前";
+    if (days < 60) return "一个月前";
+    if (days < 90) return "两个月前";
+    if (days < 180) return "三个月前";
+    if (days < 365) return Math.floor(days / 30) + " 个月前";
+    if (days < 730) return "一年前";
+    return Math.floor(days / 365) + " 年前";
+  }
+
+  function getFilteredExperiments() {
+    var query = (els.search.value || "").trim().toLowerCase();
+    var statusChip = document.querySelector("#status-filters .filter-chip.active");
+    var status = statusChip ? statusChip.dataset.status : "";
+    var showArchived = statusChip && statusChip.dataset.archive === "true";
+    var activeTags = [];
+    document.querySelectorAll("#tag-filters .filter-chip.active").forEach(function (chip) {
+      activeTags.push((chip.dataset.tag || "").toLowerCase());
+    });
+    // 元素可能缺失（filterExperiments 是全局函数，可能在非列表页上下文被误调用）
+    var dateFromEl = document.getElementById("date-from");
+    var dateToEl = document.getElementById("date-to");
+    var dateFrom = dateFromEl ? dateFromEl.value : "";
+    var dateTo = dateToEl ? dateToEl.value : "";
+
+    return state.experiments.filter(function (exp) {
+      if (isArchived(exp) !== showArchived) return false;
+      if (query && searchableText(exp).indexOf(query) === -1) return false;
+      if (status && exp.status !== status) return false;
+      if (activeTags.length) {
+        var tags = (exp.tags || []).map(function (tag) { return String(tag).toLowerCase(); });
+        if (!activeTags.some(function (tag) { return tags.indexOf(tag) >= 0; })) return false;
+      }
+      var dateKey = normalizeDate(exp.date);
+      if (dateFrom && (!dateKey || dateKey < dateFrom)) return false;
+      if (dateTo && (!dateKey || dateKey > dateTo)) return false;
+      return true;
+    });
+  }
+
+  function searchableText(exp) {
+    return [
+      exp.id,
+      exp.title,
+      exp.purpose,
+      exp.conclusion,
+      exp.experimenter,
+      (exp.tags || []).join(" "),
+      (exp.sop || []).join(" "),
+      (exp.materials || []).map(function (m) { return m && m.name ? m.name : ""; }).join(" "),
+      ((exp.observations || {}).items || []).join(" ")
+    ].join(" ").toLowerCase();
+  }
+
+  function hasActiveSearchOrFilters() {
+    if ((els.search.value || "").trim()) return true;
+    var statusChip = document.querySelector("#status-filters .filter-chip.active");
+    if (statusChip && (statusChip.dataset.status || statusChip.dataset.archive === "true")) return true;
+    if (document.querySelectorAll("#tag-filters .filter-chip.active").length) return true;
+    var dfEl = document.getElementById("date-from");
+    var dtEl = document.getElementById("date-to");
+    if ((dfEl && dfEl.value) || (dtEl && dtEl.value)) return true;
+    return false;
+  }
+
+  function isInCurrentCategory(exp) {
+    if (state.currentCategory === "__all__") return true;
+    return (state.collections[state.currentCategory] || []).indexOf(exp.id) >= 0;
+  }
+
+  function belongsToAnyCategory(exp) {
+    return Object.keys(state.collections).some(function (name) {
+      return (state.collections[name] || []).indexOf(exp.id) >= 0;
+    });
+  }
+
+  function categoryNamesFor(expId) {
+    return Object.keys(state.collections).filter(function (name) {
+      return (state.collections[name] || []).indexOf(expId) >= 0;
+    });
+  }
+
+  function activePinnedIds() {
+    if (state.currentCategory === "__all__") return state.pinnedIds || [];
+    return state.categoryPinned[state.currentCategory] || [];
+  }
+
+  function isPinnedInCurrentView(expId) {
+    return activePinnedIds().indexOf(expId) >= 0;
+  }
+
+  function sortExperiments(items, prioritizePins) {
+    var pinIds = prioritizePins ? activePinnedIds() : [];
+    return items.slice().sort(function (a, b) {
+      var ap = pinIds.indexOf(a.id);
+      var bp = pinIds.indexOf(b.id);
+      if (ap >= 0 || bp >= 0) {
+        if (ap < 0) return 1;
+        if (bp < 0) return -1;
+        return ap - bp;
+      }
+      return String(normalizeDate(b.date) || "").localeCompare(String(normalizeDate(a.date) || "")) ||
+        String(b.id || "").localeCompare(String(a.id || ""));
+    });
+  }
+
+  function renderCard(exp, isOther) {
+    var pinned = !isOther && isPinnedInCurrentView(exp.id);
+    var archived = isArchived(exp);
+    var statusLabel = statusShort(exp.status);
+    var categories = categoryNamesFor(exp.id);
+    var pinLabel = pinActionLabel(pinned);
+    var pinAction = isOther ? "" : "<button type=\"button\" class=\"card-menu-item pin-item\">" + escHtml(pinLabel) + "</button>";
+    return "" +
+      "<article class=\"record-card " + (pinned ? "pinned-card " : "") + (archived ? "archived-record " : "") + (isOther ? "other-result" : "") + "\" data-exp-id=\"" + escAttr(exp.id) + "\" tabindex=\"0\">" +
+        "<div class=\"card-header\">" +
+          "<div class=\"header-exp\">" +
+            escHtml(exp.id || "") +
+            "<button type=\"button\" class=\"card-menu-btn\" aria-label=\"Experiment actions\">&#x22ee;</button>" +
+            "<div class=\"card-menu-dropdown\" hidden>" +
+              pinAction +
+              "<button type=\"button\" class=\"card-menu-item category-item\">" + (categories.length ? "Categorize (" + categories.length + ")" : "Categorize") + "</button>" +
+            "</div>" +
+          "</div>" +
+          "<div class=\"header-status s-" + escAttr(exp.status || "planned") + "\">" + escHtml(archived ? "已归档" : statusLabel) + "</div>" +
+        "</div>" +
+        "<div class=\"card-body\">" +
+          "<div class=\"main-content\">" +
+            "<div class=\"black-overhang\"></div>" +
+            "<h2 class=\"content-title\">" + escHtml(exp.title || "(untitled)") + "</h2>" +
+            "<div class=\"tags-container\">" + (exp.tags || []).map(function (tag) { return "<span class=\"tag\">" + escHtml(tag) + "</span>"; }).join("") + "</div>" +
+          "</div>" +
+          "<div class=\"sidebar\">" +
+            "<div class=\"date-block\">" + escHtml(formatDate(exp.date)) + "</div>" +
+            "<div class=\"person-box\"><div class=\"person-accent\"></div><div class=\"person-name\">" + escHtml(exp.experimenter || "-") + "</div></div>" +
+            "<div class=\"date-block\">" + escHtml(formatDate(exp.end_date || exp.date)) + "</div>" +
+          "</div>" +
+        "</div>" +
+      "</article>";
+  }
+
+  /* 索引行：两行布局 — 状态点居中，第一行编号+实验员，第二行标题，菜单跨两行 */
+  function renderRow(exp, isOther) {
+    var pinned = !isOther && isPinnedInCurrentView(exp.id);
+    var archived = isArchived(exp);
+    var categories = categoryNamesFor(exp.id);
+    var pinLabel = pinActionLabel(pinned);
+    var pinAction = isOther ? "" : "<button type=\"button\" class=\"card-menu-item pin-item\">" + escHtml(pinLabel) + "</button>";
+    var person = exp.experimenter ? escHtml(exp.experimenter) : "";
+    return "" +
+      "<article class=\"record-row" + (archived ? " archived-record" : "") + (isOther ? " other-result" : "") + "\" data-exp-id=\"" + escAttr(exp.id) + "\" tabindex=\"0\">" +
+        "<div class=\"row-dot-col\">" +
+          "<span class=\"row-dot " + (archived ? "archived-dot" : "s-" + escAttr(exp.status || "planned")) + "\"></span>" +
+          (pinned ? "<span class=\"pin-mark\"></span>" : "") +
+        "</div>" +
+        "<div class=\"row-line1\">" +
+          "<span class=\"row-id\">" + escHtml(exp.id || "") + "</span>" +
+          "<span class=\"row-person\">" + person + "</span>" +
+          (archived ? "<span class=\"row-archive\">已归档</span>" : "") +
+        "</div>" +
+        "<div class=\"row-line2\">" +
+          "<span class=\"row-title\">" + escHtml(exp.title || "(untitled)") + "</span>" +
+        "</div>" +
+        "<div class=\"row-menu-col\">" +
+          "<button type=\"button\" class=\"row-menu-btn\" aria-label=\"Experiment actions\">&#x22ee;</button>" +
+          "<div class=\"card-menu-dropdown\" hidden>" +
+            pinAction +
+            "<button type=\"button\" class=\"card-menu-item category-item\">" + (categories.length ? "Categorize (" + categories.length + ")" : "Categorize") + "</button>" +
+          "</div>" +
+        "</div>" +
+      "</article>";
+  }
+
+  function bindCards() {
+    document.querySelectorAll(".record-card").forEach(function (card) {
+      card.addEventListener("click", function (e) {
+        if (e.target.closest("button") || e.target.closest("input")) return;
+        if (state.compareMode) {
+          toggleCompareCard(card);
+          return;
+        }
+        navigateToPage("/experiments/" + card.dataset.expId);
+      });
+      card.addEventListener("keydown", function (e) {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        if (state.compareMode) toggleCompareCard(card);
+        else navigateToPage("/experiments/" + card.dataset.expId);
+      });
+      bindRecordMenu(card);
+    });
+  }
+
+  /* 行/卡共用的菜单绑定（⋮ 打开 / Pin / Categorize） */
+  function bindRecordMenu(el) {
+    var menuBtn = el.querySelector(".card-menu-btn, .row-menu-btn");
+    if (!menuBtn) return;
+    var pinBtn = el.querySelector(".pin-item");
+    var categoryBtn = el.querySelector(".category-item");
+    menuBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var menu = el.querySelector(".card-menu-dropdown");
+      var shouldOpen = menu.hidden;
+      closeCardMenus();
+      menu.hidden = !shouldOpen;
+      if (shouldOpen) {
+        // 先抑制卡片 hover 上浮（消除 transform），使 fixed 菜单包含块回到视口，
+        // 再读取按钮回位后的坐标定位菜单
+        el.classList.add("menu-open");
+        var r = menuBtn.getBoundingClientRect();
+        var mw = menu.offsetWidth || 150;
+        var mh = menu.offsetHeight || 120;
+        var left = Math.min(r.right - mw, window.innerWidth - mw - 8);
+        if (left < 8) left = 8;
+        var top = r.bottom + 4;
+        if (top + mh > window.innerHeight - 8) top = Math.max(8, r.top - mh - 4);
+        menu.style.position = "fixed";
+        menu.style.left = left + "px";
+        menu.style.top = top + "px";
+        menu.style.right = "auto";
+      }
+    });
+    if (pinBtn) {
+      pinBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        togglePin(el.dataset.expId);
+      });
+    }
+    categoryBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      openAssignCategory(el.dataset.expId);
+    });
+  }
+
+  function bindRows() {
+    document.querySelectorAll(".record-row").forEach(function (row) {
+      row.addEventListener("click", function (e) {
+        if (e.target.closest("button")) return;
+        if (state.compareMode) {
+          toggleCompareCard(row);   // 索引行模式：compare 下点行即勾选/取消
+          return;
+        }
+        navigateToPage("/experiments/" + row.dataset.expId);
+      });
+      row.addEventListener("keydown", function (e) {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        if (state.compareMode) toggleCompareCard(row);
+        else navigateToPage("/experiments/" + row.dataset.expId);
+      });
+      bindRecordMenu(row);
+    });
+  }
+
+  function closeCardMenus() {
+    document.querySelectorAll(".card-menu-dropdown").forEach(function (menu) {
+      menu.hidden = true;
+      menu.style.position = "";
+      menu.style.left = "";
+      menu.style.top = "";
+      menu.style.right = "";
+      var row = menu.closest(".record-card, .record-row");
+      if (row) row.classList.remove("menu-open");
+    });
+  }
+
+  function togglePin(expId) {
+    var body = {};
+    if (state.currentCategory !== "__all__") body.collection = state.currentCategory;
+    fetch("/api/experiments/" + encodeURIComponent(expId) + "/pin", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body)
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (result) {
+        if (!result.ok) throw new Error(result.error || "Failed");
+        var ids = state.currentCategory === "__all__"
+          ? state.pinnedIds
+          : (state.categoryPinned[state.currentCategory] || (state.categoryPinned[state.currentCategory] = []));
+        if (result.pinned) {
+          if (ids.indexOf(expId) < 0) ids.push(expId);
+        } else {
+          var next = ids.filter(function (id) { return id !== expId; });
+          if (state.currentCategory === "__all__") state.pinnedIds = next;
+          else state.categoryPinned[state.currentCategory] = next;
+        }
+        renderResults();
+      })
+      .catch(function (err) { alert(err.message || "Failed"); });
+  }
+
+  function pinActionLabel(pinned) {
+    if (state.currentCategory === "__all__") return pinned ? "Unpin Globally" : "Pin Globally";
+    return pinned ? "Unpin in Category" : "Pin in Category";
+  }
+
+  function openAssignCategory(expId) {
+    closeCardMenus();
+    var names = Object.keys(state.collections);
+    if (!names.length) {
+      openCategoryModal("add");
+      return;
+    }
+    var currentNames = categoryNamesFor(expId);
+    var html = names.map(function (name) {
+      var checked = currentNames.indexOf(name) >= 0 ? " checked" : "";
+      return "<label class=\"assign-row\"><input type=\"checkbox\" value=\"" + escAttr(name) + "\"" + checked + "> <span>" + escHtml(name) + "</span></label>";
+    }).join("");
+    els.modalTitle.textContent = "Categorize";
+    els.modalName.required = false;
+    els.modalName.disabled = true;    // Categorize 只做勾选：关闭 Name/Desc 输入框
+    els.modalDesc.disabled = true;
+    els.modalName.parentElement.hidden = true;
+    els.modalDesc.parentElement.hidden = true;
+    els.modalForm.dataset.assignExpId = expId;
+    var old = els.modalForm.querySelector(".assign-list");
+    if (old) old.remove();
+    var list = document.createElement("div");
+    list.className = "assign-list";
+    list.innerHTML = html || "<div class=\"category-desc\">No categories yet.</div>";
+    els.modalForm.insertBefore(list, els.modalForm.querySelector(".category-modal-actions"));
+    els.modal.hidden = false;
+  }
+
+  function saveCategoryModal(e) {
+    e.preventDefault();
+    var assignExpId = els.modalForm.dataset.assignExpId;
+    if (assignExpId) {
+      saveAssignedCategories(assignExpId);
+      return;
+    }
+    var name = els.modalName.value.trim();
+    var description = els.modalDesc.value.trim();
+    if (!name) return;
+    var url = "/api/categories";
+    var method = "POST";
+    if (state.modalMode === "edit") {
+      url = "/api/categories/" + encodeURIComponent(state.modalCategory);
+      method = "PATCH";
+    }
+    fetch(url, {
+      method: method,
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({name: name, description: description})
+    }).then(function (r) { return r.json(); })
+      .then(function (result) {
+        if (!result.ok) throw new Error(result.error || "Failed");
+        return refreshCategories(name);
+      })
+      .then(closeCategoryModal)
+      .catch(function (err) { alert(err.message || "Failed"); });
+  }
+
+  function saveAssignedCategories(expId) {
+    var before = categoryNamesFor(expId);
+    var after = [];
+    els.modalForm.querySelectorAll(".assign-list input:checked").forEach(function (input) {
+      after.push(input.value);
+    });
+    var requests = [];
+    Object.keys(state.collections).forEach(function (name) {
+      var had = before.indexOf(name) >= 0;
+      var has = after.indexOf(name) >= 0;
+      if (had !== has) {
+        requests.push(fetch("/api/experiments/" + encodeURIComponent(expId) + "/favorite", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({collection: name})
+        }).then(function (r) { return r.json(); }));
+      }
+    });
+    Promise.all(requests)
+      .then(function (results) {
+        var failed = results.find(function (result) { return !result.ok; });
+        if (failed) throw new Error(failed.error || "Failed");
+        return refreshCategories();
+      })
+      .then(closeCategoryModal)
+      .catch(function (err) { alert(err.message || "Failed"); });
+  }
+
+  function closeCategoryModal() {
+    els.modal.hidden = true;
+    els.modalForm.reset();
+    delete els.modalForm.dataset.assignExpId;
+    els.modalName.parentElement.hidden = false;
+    els.modalDesc.parentElement.hidden = false;
+    els.modalName.required = true;
+    els.modalName.disabled = false;
+    els.modalDesc.disabled = false;
+    var list = els.modalForm.querySelector(".assign-list");
+    if (list) list.remove();
+  }
+
+  function toggleCompareCard(card) {
+    var expId = card.dataset.expId;
+    var idx = state.compareSelected.indexOf(expId);
+    if (idx >= 0) state.compareSelected.splice(idx, 1);
+    else {
+      if (state.compareSelected.length >= 4) {
+        alert("Max 4 experiments");
+        return;
+      }
+      state.compareSelected.push(expId);
+    }
+    updateCompareBar();
+    syncCompareCards();
+  }
+
+  function syncCompareCards() {
+    // 卡片与索引行统一按选中状态高亮（无勾选框，点击整卡/整行勾选）
+    document.querySelectorAll(".record-card, .record-row").forEach(function (el) {
+      var checked = state.compareSelected.indexOf(el.dataset.expId) >= 0;
+      el.classList.toggle("selected", checked);
+    });
+  }
+
+  function updateCompareBar() {
+    var count = state.compareSelected.length;
+    els.compareCount.textContent = count < 2 ? "已选择 " + count + " 条 / 至少选择 2 条" : "已选择 " + count + " 条实验记录";
+    els.compareGoBtn.disabled = count < 2;
+    // 通知竖屏顶部状态栏（panel.js 注册的钩子）
+    if (window.onCompareBarUpdate) window.onCompareBarUpdate(count);
+  }
+
+  function goCompare() {
+    if (state.compareSelected.length < 2) return;
+    navigateToPage("/compare?ids=" + state.compareSelected.join(","));
+  }
+
+  function updateMeta(primaryCount, otherCount) {
+    var categoryLabel = state.currentCategory === "__all__" ? "全部实验" : state.currentCategory;
+    var active = document.querySelector("#status-filters .filter-chip.active");
+    var archived = active && active.dataset.archive === "true";
+    var count = state.experiments.filter(function (exp) { return isArchived(exp) === archived; }).length;
+    els.listContext.textContent = count + " 条记录 · " + (archived ? "已归档" : "分类：" + categoryLabel);
+  }
+
+  function isArchived(exp) {
+    return exp && (exp.archived === true || exp.archived === 1 || exp.archived === "1" || exp.archived === "true");
+  }
+
+  function normalizeDate(value) {
+    if (!value) return "";
+    var s = String(value).trim();
+    // "N/A"、"NA"、"null"、"none"、"-"、"无"、"未标注" 等占位值视为无日期
+    if (/^(n\/?a|na|null|none|undefined|-|无|未标注|tbd)$/i.test(s)) return "";
+    return s.slice(0, 10).replace(/\//g, "-");
+  }
+
+  function formatDate(value) {
+    return normalizeDate(value) || "-";
+  }
+
+  function statusShort(status) {
+    var map = {done: "已完成", running: "进行中", failed: "失败", repeated: "复刻", planned: "计划中"};
+    return map[status] || "Plan";
+  }
+
+  function escHtml(value) {
+    var d = document.createElement("div");
+    d.textContent = value == null ? "" : String(value);
+    return d.innerHTML;
+  }
+
+  function escAttr(value) {
+    return escHtml(value).replace(/"/g, "&quot;");
+  }
+
+  window.filterExperiments = renderResults;
+  window.enterCompareMode = function () { setActivePanel("compare"); };
+
+  // 对比模式全局接口：供移动端对比弹窗（panel.js）直接勾选实验
+  window.compareApi = {
+    toggle: function (id) {
+      var idx = state.compareSelected.indexOf(id);
+      if (idx >= 0) {
+        state.compareSelected.splice(idx, 1);
+      } else {
+        if (state.compareSelected.length >= 4) return false;
+        state.compareSelected.push(id);
+      }
+      updateCompareBar();
+      syncCompareCards();
+      return true;
+    },
+    isSelected: function (id) { return state.compareSelected.indexOf(id) >= 0; },
+    getCount: function () { return state.compareSelected.length; },
+    exit: function () { setActivePanel(""); },
+    go: goCompare,
+  };
+  window.savePageState = function () { return { scrollY: window.scrollY }; };
+  window.restorePageState = function (pageState) {
+    if (pageState && pageState.scrollY !== undefined) window.scrollTo(0, pageState.scrollY);
+  };
+
+  init();
+})();
+</script>
+
+<style>
+/* ---- 索引行视图（一行一条，一屏 15-20 条） ---- */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.view-toggle {
+  display: flex;
+  border: 3px solid var(--black);
+  background: var(--white);
+}
+
+.view-toggle button {
+  min-height: 36px;
+  padding: 0 0.85rem;
+  border: 0;
+  background: var(--white);
+  color: var(--black);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 900;
+  line-height: 1;
+  transition: background 140ms ease;
+}
+
+.view-toggle button + button { border-left: 0; }   /* 分隔线改由 ::before 绘制（避免双线） */
+.view-toggle button.active { background: var(--yellow); }
+.view-toggle button:focus { outline: none; }   /* 去掉焦点蓝框 */
+
+/* 按日期分组的组头：小色块 + 日期/周几/相对时间（紧凑） */
+.date-group-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.85rem 0 0.15rem;
+  padding: 2px 0 2px 6px;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+.date-group-head:first-child { margin-top: 0.4rem; }
+/* 色块即展开/收起按钮：黄（展开）↔ 灰（收起），带颜色过渡；悬停轻微上浮 */
+/* 尺寸：宽 15.3（等比 1/4 后），高 12（不再等比——3px 上下边框占 6px，
+   高度再小状态色就会被边框吃光），边框 3px 不变 */
+/* 注意：必须重置全局按钮规则（de-stijl.css 的 [role="button"]）的 padding——
+   否则 0.5rem 1.2rem 的内边距会把小色块撑大（这就是此前一直"不小"的根因） */
+.date-marker {
+  width: 35px;
+  height: 15px;
+  border: 3px solid var(--black);
+  flex: none;
+  background: var(--yellow);
+  cursor: pointer;
+  transition: background-color 200ms ease, transform 140ms ease;
+  padding: 0;
+  display: block;
+  font-size: 0;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: left;
+}
+.date-marker:hover {
+  transform: none;                 /* 日期色块不需要悬浮位移 */
+  background: var(--yellow);   /* 覆盖全局 [role="button"]:hover 的白色背景 */
+}
+.date-marker:focus-visible { outline: none; }   /* 去掉焦点蓝框 */
+.date-group-head.collapsed .date-marker { background: var(--text-3); }
+
+/* 展开/收起动画：组内容 0fr ↔ 1fr 平滑过渡 */
+.date-group-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 240ms cubic-bezier(.16, 1, .3, 1);
+}
+.date-group-head.collapsed + .date-group-body { grid-template-rows: 0fr; }
+.date-group-body > .date-group-inner {
+  overflow: hidden;
+  min-height: 0;
+  /* 顶部留 2px：第一个卡片 hover 上浮 translateY(-2px) 时
+     移入这个 padding 区域，避免被 overflow:hidden 裁掉上边框 */
+  padding-top: 2px;
+}
+.date-text { white-space: nowrap; }
+.date-full {
+  margin-left: auto;
+  font-family: "Courier New", monospace;
+  font-size: 0.68rem;
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+/* 时间线主轴：竖线贯穿主结果区，串联所有实验日期组（色块骑在竖线上） */
+#primary-results {
+  position: relative;
+}
+
+/* 置顶区：独立在时间线上方 —— 不缩进、无竖线，与时间线用粗线分隔 */
+#pinned-results {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.3rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 4px solid var(--black);
+}
+#pinned-results .record-row:last-child,
+#pinned-results .record-card:last-child {
+  border-bottom: none;
+}
+#primary-results::before {
+  content: "";
+  position: absolute;
+  left: 21px;
+  top: 4px;
+  bottom: 4px;
+  width: 4px;
+  background: var(--black);
+  pointer-events: none;
+}
+/* 实验卡片整体缩进到竖线右侧（含行间分隔横线一起缩进） */
+#primary-results .record-row,
+#primary-results .record-card {
+  margin-left: 40px;
+}
+/* 组头贴竖线：色块中心与竖线中心对齐（8px + 30px/2 = 23px） */
+#primary-results .date-group-head {
+  padding-left: 8px;
+}
+
+.record-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 0.225rem 0.5rem;
+  padding: 8px 0.9rem;
+  border-bottom: 2px solid var(--black);
+  background: var(--white);
+  cursor: pointer;
+  transition: background 140ms ease;
+  line-height: 1.3;
+}
+
+.row-dot-col {
+  grid-row: 1 / 3;
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.row-line1 {
+  grid-row: 1;
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 0.85em;
+  overflow: hidden;
+}
+
+.row-line2 {
+  grid-row: 2;
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  height: 0.85em;
+  overflow: hidden;
+}
+
+.record-row:last-child { border-bottom: 4px solid var(--black); }
+
+.record-row:hover {
+  background: var(--blue);
+  color: var(--white);
+  box-shadow: inset 4px 0 0 var(--black);
+}
+.record-row:hover .row-id,
+.record-row:hover .row-person { color: #d7d7d7; }
+
+.record-row:focus {
+  outline: none;   /* 去掉焦点蓝框 */
+}
+
+.record-row.other-result { opacity: 0.78; }
+
+/* 状态色点 */
+.row-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--black);
+  flex: none;
+}
+
+.row-dot.s-done     { background: var(--black); }
+.row-dot.s-running  { background: var(--blue); }
+.row-dot.s-failed   { background: var(--red); }
+.row-dot.s-repeated { background: var(--white); box-shadow: 2px 2px 0 var(--blue); }
+.row-dot.s-planned  { background: var(--yellow); }
+
+/* 置顶标记：黄色小方块 */
+.pin-mark {
+  width: 10px;
+  height: 10px;
+  background: var(--yellow);
+  border: 2px solid var(--black);
+  flex: none;
+}
+
+.row-id {
+  flex: none;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+}
+
+.row-person {
+  flex: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.row-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+/* 菜单列：跨两行，垂直居中 */
+.row-menu-col {
+  grid-row: 1 / 3;
+  grid-column: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* 菜单按钮：De Stijl 风格 */
+.row-menu-btn {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--black);
+  background: var(--white);
+  color: var(--black);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.row-menu-btn:hover {
+  background: var(--black);
+  color: var(--white);
+}
+
+/* 行内菜单下拉：挂菜单列下方 */
+.record-row .card-menu-dropdown {
+  top: calc(100% - 4px);
+  right: 0;
+}
+
+@media (max-width: 640px) {
+  .record-row { padding: 0.25rem 0.7rem; }
+  .row-line1 { gap: 0.4rem; }
+}
+</style>
+
+{% endblock %}

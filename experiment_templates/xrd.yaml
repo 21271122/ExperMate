@@ -1,0 +1,11 @@
+id: xrd
+title: XRD 物相表征
+category: 表征
+description: X射线衍射分析实验记录模板，用于物相鉴定和晶体结构分析
+tags:
+- XRD
+- characterization
+content: <p><strong>实验目的：</strong>利用X射线衍射（XRD）分析【样品名称】的物相组成、晶体结构和结晶度。</p><p><strong>样品信息：</strong></p><ul><li>样品编号：【填写】</li><li>样品来源：【合成/购买/处理后】</li><li>样品形态：【粉末/块体/薄膜】</li><li>制样方式：【平铺法/压片法/原片直接测试】</li></ul><p><strong>测试参数：</strong></p><ul><li>仪器型号：【填写，如
+  Bruker D8 Advance】</li><li>靶材：Cu Kα（λ=1.5406 Å）/ Co / Mo</li><li>管电压：【填写】kV，管电流：【填写】mA</li><li>扫描范围
+  2θ：【填写】° ~ 【填写】°</li><li>扫描步长：【填写】°，每步时间：【填写】s</li><li>扫描模式：连续扫描 / 步进扫描</li></ul><p><strong>数据处理与分析：</strong></p><ul><li>物相检索数据库：PDF-2
+  / ICSD / COD</li><li>主要衍射峰归属：【填写】</li><li>晶粒尺寸计算（Scherrer公式）：【填写】</li><li>结晶度估算：【填写】</li></ul><p><strong>结论：</strong>【填写物相分析结果】</p><p><strong>备注：</strong>【填写其他信息】</p>

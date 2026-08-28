@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}分析报告{% endblock %}
+{% block page_id %}analyze{% endblock %}
+{% block page_bg %}background-color: var(--page-bg-red);{% endblock %}
+{% block topbar_style %}
+.topbar { background: var(--red); }
+.topbar-back { background: var(--white); color: var(--red); border-color: var(--white); }
+.topbar-back:hover { background: var(--red); color: var(--white); }
+{% endblock %}
+{% block content %}
+
+<h1 style="border-bottom:none;padding-bottom:0">分析报告</h1>
+<p style="font-weight:700;font-size:0.85rem;opacity:0.5;margin-bottom:1.5rem">由 AI 协助完成的跨实验分析</p>
+
+<div id="analysis-list">
+  <div style="text-align:center;padding:1rem;opacity:0.5">正在加载…</div>
+</div>
+
+<div id="empty-state" class="empty-state" style="display:none">
+  <h3>还没有分析报告</h3>
+  <p>在对话中告诉助手你想分析哪些实验记录。</p>
+  <a href="/new" role="button">前往对话</a>
+</div>
+
+<style>
+.analysis-card {
+  border: 4px solid var(--black);
+  background: var(--white);
+  padding: 1rem 1.2rem;
+  margin-bottom: 1rem;
+  cursor: pointer;
+  box-shadow: 6px 6px 0px #111;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.analysis-card:hover { transform: translate(-3px, -3px); box-shadow: 10px 10px 0px #111; }
+.analysis-id { font-weight:700; font-size:0.8rem; }
+.analysis-date { font-size:0.75rem; font-weight:600; opacity:0.5; }
+.analysis-question { font-size:0.85rem; font-weight:600; margin:0.4rem 0; }
+.analysis-refs { display:flex; gap:0.3rem; flex-wrap:wrap; margin-bottom:0.5rem; }
+.analysis-refs a { font-size:0.72rem; font-weight:700; color:var(--black); text-decoration:none; border:2px solid var(--black); padding:0.1rem 0.4rem; }
+.analysis-refs a:hover { background:var(--black); color:var(--white); }
+</style>
+
+<script>
+window.savePageState = function() { return {scrollY: window.scrollY}; };
+window.restorePageState = function(state) { if (state && state.scrollY !== undefined) window.scrollTo(0, state.scrollY); };
+
+function escHtml(s) { var d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+
+fetch('/api/analysis-history')
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    var list = document.getElementById('analysis-list');
+    var empty = document.getElementById('empty-state');
+    if (!Array.isArray(data) || data.length === 0) { list.style.display='none'; empty.style.display=''; return; }
+    var html = '';
+    data.forEach(function(a) {
+      var refLinks = (a.selected_ids||[]).map(function(id) {
+        return '<a href="/experiments/'+escHtml(id)+'" onclick="event.stopPropagation()">'+escHtml(id)+'</a>';
+      }).join(' ');
+      html += '<article class="analysis-card" onclick="navigateToPage(\'/analysis/'+escHtml(a.id||'')+'\')">';
+      html += '<div style="display:flex;justify-content:space-between"><span class="analysis-id">'+escHtml(a.id||'')+'</span><span class="analysis-date">'+escHtml(a.timestamp||'')+'</span></div>';
+      html += '<div class="analysis-question">' + escHtml((a.question||'完整分析')) + '</div>';
+      if (refLinks) html += '<div class="analysis-refs">'+refLinks+'</div>';
+      html += '<button class="outline danger" style="font-size:0.7rem;padding:0.2rem 0.6rem" onclick="event.stopPropagation();deleteAnalysis(\''+escHtml(a.id||'')+'\')">删除</button></article>';
+    });
+    list.innerHTML = html; list.style.display=''; empty.style.display='none';
+  });
+
+function deleteAnalysis(aid) {
+  if (!confirm('删除分析报告 ' + aid + '？')) return;
+  fetch('/api/analysis-history/' + aid, {method:'DELETE'})
+    .then(function(r) { return r.json(); })
+    .then(function(r) { if (r.ok) { if (window.ExdiarySound) window.ExdiarySound.play('delete'); location.reload(); } else alert('删除失败'); });
+}
+</script>
+
+{% endblock %}

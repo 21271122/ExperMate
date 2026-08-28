@@ -1,0 +1,10 @@
+id: photocatalysis
+title: 光催化降解实验
+category: 光催化
+description: 半导体光催化剂降解有机污染物的标准实验流程，适用于 TiO2/ZnO/g-C3N4 等催化剂评价
+tags:
+- photocatalysis
+- thin-film
+- calcination
+content: <p><strong>实验目的：</strong>研究【催化剂名称，如TiO2 P25】在【光源类型，如300W氙灯】照射下对【目标污染物，如亚甲基蓝】的光催化降解性能，确定最佳【变量，如负载量/浓度/pH】。</p><p><strong>材料与试剂：</strong></p><ul><li>【催化剂名称】，纯度【填写纯度】，厂家【填写厂家】</li><li>【目标污染物】，浓度【填写浓度】</li><li>基板：【基板类型，如2×2
+  cm玻璃片】</li></ul><p><strong>实验设置【填写数量】组：</strong></p><ul><li>组1：【变量条件1】</li><li>组2：【变量条件2】</li><li>组3：【变量条件3】</li></ul><p><strong>实验步骤：</strong></p><ol><li>配制【目标污染物】溶液，浓度【填写浓度】</li><li>准备基板，清洗干燥</li><li>配制不同【变量】的催化剂悬浮液：【填写具体配比】</li><li>采用【涂覆方法，如浸渍提拉法】将催化剂涂覆到基板上</li><li>在【温度】°C下煅烧【时间】小时</li><li>使用【光源】照射样品</li><li>每【时间间隔】分钟取样，用【测试方法，如紫外-可见分光光度计】测量【指标，如吸光度】</li></ol><p><strong>预期结果：</strong>【填写预期】</p><p><strong>备注：</strong>【填写其他信息】</p>

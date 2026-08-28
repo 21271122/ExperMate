@@ -1,0 +1,205 @@
+{% if not fragment %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="exdiary-version" content="1.0.0">
+<link rel="icon" type="image/png" href="/static/img/favicon.png">
+<title>ExperMate｜小同门 — {% block title %}实验记录{% endblock %}</title>
+<script>
+/* 主题防闪烁：首帧前应用 localStorage 偏好或系统偏好（'dark' | 'light'，无键 = 跟随系统） */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('exdiary_theme'); } catch (e) {}
+  if (t !== 'dark' && t !== 'light') {
+    t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  }
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
+<link href="/static/vendor/quill/quill.snow.css" rel="stylesheet">
+<script src="/static/vendor/htmx/htmx.min.js"></script>
+<script src="/static/vendor/marked/marked.min.js"></script>
+<script>if(typeof marked==='undefined'){marked={parse:function(t){return t.replace(/</g,'&lt;').replace(/>/g,'&gt;')}}}</script>
+<script src="/static/vendor/quill/quill.js"></script>
+<link rel="stylesheet" href="/static/css/de-stijl.css?v=20260825-child-streaming">
+<link rel="stylesheet" href="/static/css/components.css?v=20260822-preview-mobile">
+<link rel="stylesheet" href="/static/css/motion.css">
+<style>
+{% block page_bg %}body { background-color: var(--white); }{% endblock %}
+{% block topbar_style %}
+.topbar { background: var(--white); }
+.topbar-back { background: var(--black); color: var(--white); }
+.topbar-back:hover { background: var(--white); color: var(--black); }
+{% endblock %}
+</style>
+</head>
+<body data-page="{% block page_id %}unknown{% endblock %}">
+
+{% block topbar %}
+<nav class="topbar" id="topbar">
+  <div class="topbar-inner">
+    <a href="/" class="topbar-back">&#x2190; Return</a>
+    <button type="button" id="auth-link" onclick="openE2ee()" style="margin-left:auto;font-size:0.85rem;color:var(--black);background:none;border:0;cursor:pointer;font-weight:700">登录/注册</button>
+  </div>
+</nav>
+{% endblock %}
+
+<main class="container">
+{% endif %}{# end if not fragment #}
+
+{% block content %}{% endblock %}
+
+{% if not fragment %}
+</main>
+
+<footer class="bottom-bar">
+  <span>ExperMate｜小同门</span>
+  <span>System Online</span>
+</footer>
+
+<script src="/static/js/nav.js"></script>
+<script src="/static/js/api-client.js"></script>
+<script src="/static/js/attachment-viewer.js?v=20260822-preview-mobile"></script>
+<script src="/static/js/edit-mode.js?v=20260824-print-preview-actions"></script>
+<script src="/static/js/child-agent.js?v=20260825-child-streaming"></script>
+<script src="/static/js/motion.js"></script>
+<script src="/static/js/theme.js"></script>
+<script>
+// 全局 fetch 拦截：所有 /api/ 请求自动带 token
+(function() {
+  var _orig = window.fetch;
+  window.fetch = function(url, opts) {
+    opts = opts || {};
+    if (typeof url === 'string' && url.indexOf('/api/') !== -1) {
+      var token = localStorage.getItem('exdiary_token');
+      if (token) {
+        opts.headers = opts.headers || {};
+        opts.headers['Authorization'] = 'Bearer ' + token;
+      }
+    }
+    return _orig.call(window, url, opts);
+  };
+})();
+
+(function() {
+  var current = document.querySelector('meta[name="exdiary-version"]');
+  if (!current) return;
+  current = current.content;
+  var url = (document.querySelector('meta[name="exdiary-relay"]') || {}).content || '';
+  if (!url) return;
+  fetch(url + '/version.json').then(function(r) { return r.json(); }).then(function(v) {
+    if (compareVer(current, v.min_required) < 0) {
+      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif"><div style="text-align:center;border:3px solid #000;padding:3rem"><h2>版本过旧，请更新</h2><p>当前 '+current+'，最低要求 '+v.min_required+'</p><a href="'+v.download+'" style="display:inline-block;padding:0.5rem 1.5rem;background:#FFD700;color:#000;text-decoration:none;font-weight:700">下载最新版 '+v.latest+'</a></div></div>';
+    } else if (compareVer(current, v.latest) < 0) {
+      var b = document.createElement('div');
+      b.style.cssText = 'text-align:center;padding:0.5rem;background:#FFD700;color:#000;font-weight:700;font-size:0.85rem';
+      b.innerHTML = '有新版本 '+v.latest+'（当前 '+current+'）<a href="'+v.download+'" style="margin-left:0.5rem;color:#000">下载</a>';
+      document.body.insertBefore(b, document.body.firstChild);
+    }
+  }).catch(function(){});
+  function compareVer(a, b) { var x = a.split('.').map(Number), y = b.split('.').map(Number); return x[0]!==y[0] ? x[0]-y[0] : x[1]!==y[1] ? x[1]-y[1] : x[2]-y[2]; }
+})();
+// 登录入口：已登录显示账号；未登录点按钮弹出 e2ee 悬浮窗
+(function() {
+  var token = localStorage.getItem('exdiary_token');
+  var acc = localStorage.getItem('e2ee_account');
+  var authEl = document.getElementById('auth-link');
+  if (authEl) {
+    if (token || acc) { authEl.textContent = (acc && acc !== 'undefined') ? acc : '已登录'; authEl.style.color = 'var(--ok-green)'; }
+    else { authEl.textContent = '登录/注册'; authEl.style.color = ''; }
+  }
+})();
+// 同步状态指示器
+(function() {
+  var token = localStorage.getItem('exdiary_token');
+  if (!token) return;
+  var el = document.createElement('span');
+  el.id = 'sync-indicator';
+  el.style.cssText = 'margin-left:1rem;font-size:0.8rem;font-weight:700';
+  setInterval(function() {
+    fetch('/api/sync-status', {headers:{Authorization:'Bearer '+token}})
+      .then(function(r){return r.json();}).then(function(d){
+        el.textContent = d.status === 'synced' ? '已同步' : d.status === 'dirty' ? '同步中('+d.dirty+')' : '';
+        el.style.color = d.status === 'synced' ? 'var(--ok-green)' : 'var(--warn-amber)';
+      }).catch(function(){});
+  }, 15000);
+  var nav = document.querySelector('nav');
+  if (nav) nav.appendChild(el);
+})();
+</script>
+<div class="modal-mask" id="e2ee-mask" style="position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;padding-top:9vh;z-index:2000">
+  <div style="background:var(--white,#fff);border:3px solid var(--black,#111);width:400px;max-width:92vw;box-shadow:10px 10px 0 rgba(0,0,0,.25)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem 1rem;background:var(--black,#111);color:var(--white,#fff);font-weight:800">账号<button type="button" onclick="closeE2ee()" style="background:none;border:0;color:#fff;font-size:1.3rem;cursor:pointer;font-weight:900">&times;</button></div>
+    <div style="display:flex;border-bottom:3px solid var(--black,#111)">
+      <div class="e2ee-tab active" data-t="login" style="flex:1;padding:.65rem;text-align:center;font-weight:800;cursor:pointer;border-right:2px solid var(--black,#111);background:var(--off-white,#f4f1ea)">登录</div>
+      <div class="e2ee-tab" data-t="register" style="flex:1;padding:.65rem;text-align:center;font-weight:800;cursor:pointer;background:var(--off-white,#f4f1ea)">注册</div>
+    </div>
+    <div style="padding:1.2rem 1.4rem">
+      <form id="e2ee-login" style="display:block">
+        <div style="margin-bottom:.9rem"><label style="display:block;font-weight:700;font-size:.85rem;margin-bottom:.3rem">账号</label><input id="e2ee-login-account" autocomplete="username" style="width:100%;box-sizing:border-box;padding:.55rem;border:2px solid var(--black,#111);font-size:.95rem;font-family:inherit"></div>
+        <div style="margin-bottom:.9rem"><label style="display:block;font-weight:700;font-size:.85rem;margin-bottom:.3rem">密码</label><input type="password" id="e2ee-login-password" autocomplete="current-password" style="width:100%;box-sizing:border-box;padding:.55rem;border:2px solid var(--black,#111);font-size:.95rem;font-family:inherit"></div>
+        <button type="submit" style="width:100%;padding:.7rem;border:3px solid var(--black,#111);background:var(--yellow,#ffd02a);color:var(--black,#111);font-weight:800;font-size:1rem;cursor:pointer">登录</button>
+        <div id="e2ee-login-msg" style="margin-top:.8rem;font-weight:700;font-size:.85rem;min-height:1.1em;color:var(--red,#d00)"></div>
+      </form>
+      <form id="e2ee-register" style="display:none">
+        <div style="margin-bottom:.9rem"><label style="display:block;font-weight:700;font-size:.85rem;margin-bottom:.3rem">账号（至少 2 字符）</label><input id="e2ee-reg-account" autocomplete="username" style="width:100%;box-sizing:border-box;padding:.55rem;border:2px solid var(--black,#111);font-size:.95rem;font-family:inherit"></div>
+        <div style="margin-bottom:.9rem"><label style="display:block;font-weight:700;font-size:.85rem;margin-bottom:.3rem">恢复邮箱（忘记密码靠它找回）</label><input type="email" id="e2ee-reg-email" autocomplete="email" style="width:100%;box-sizing:border-box;padding:.55rem;border:2px solid var(--black,#111);font-size:.95rem;font-family:inherit"></div>
+        <div style="margin-bottom:.9rem"><label style="display:block;font-weight:700;font-size:.85rem;margin-bottom:.3rem">密码（至少 6 位）</label><input type="password" id="e2ee-reg-password" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding:.55rem;border:2px solid var(--black,#111);font-size:.95rem;font-family:inherit"></div>
+        <button type="submit" style="width:100%;padding:.7rem;border:3px solid var(--black,#111);background:var(--yellow,#ffd02a);color:var(--black,#111);font-weight:800;font-size:1rem;cursor:pointer">注册</button>
+        <div id="e2ee-reg-msg" style="margin-top:.8rem;font-weight:700;font-size:.85rem;min-height:1.1em;color:var(--red,#d00)"></div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  "use strict";
+  var mask = document.getElementById('e2ee-mask');
+  function el(id){ return document.getElementById(id); }
+  function setMsg(id, text, ok){ var m = el(id); m.textContent = text||''; m.style.color = ok ? 'var(--ok-green,#0b7c3d)' : 'var(--red,#d00)'; }
+  window.openE2ee = function(){
+    // 已登录则忽略
+    if (localStorage.getItem('exdiary_token') || localStorage.getItem('e2ee_account')) return;
+    mask.style.display = 'flex'; setMsg('e2ee-login-msg',''); setMsg('e2ee-reg-msg','');
+  };
+  window.closeE2ee = function(){ mask.style.display = 'none'; };
+  mask.addEventListener('click', function(e){ if (e.target === mask) mask.style.display='none'; });
+  document.querySelectorAll('.e2ee-tab').forEach(function(t){
+    t.addEventListener('click', function(){
+      document.querySelectorAll('.e2ee-tab').forEach(function(x){ x.classList.remove('active'); x.style.background='var(--off-white,#f4f1ea)'; });
+      t.classList.add('active'); t.style.background='var(--yellow,#ffd02a)';
+      var isLogin = t.dataset.t === 'login';
+      el('e2ee-login').style.display = isLogin ? 'block' : 'none';
+      el('e2ee-register').style.display = isLogin ? 'none' : 'block';
+    });
+  });
+  function api(path, body){
+    return fetch('/api/e2ee/'+path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
+      .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ d.status=r.status; return d; }); });
+  }
+  el('e2ee-login').addEventListener('submit', function(e){
+    e.preventDefault(); setMsg('e2ee-login-msg','登录中…');
+    api('login', {account: el('e2ee-login-account').value.trim(), password: el('e2ee-login-password').value})
+      .then(function(d){
+        if (d.ok){
+          localStorage.setItem('exdiary_token', d.token);
+          localStorage.setItem('e2ee_account', d.account);
+          var a = document.getElementById('auth-link'); if(a){ a.textContent=d.account; a.style.color='var(--ok-green)'; }
+          mask.style.display='none';
+        } else { setMsg('e2ee-login-msg', d.error||'登录失败'); }
+      });
+  });
+  el('e2ee-register').addEventListener('submit', function(e){
+    e.preventDefault(); setMsg('e2ee-reg-msg','注册中…');
+    api('register', {account: el('e2ee-reg-account').value.trim(), email: el('e2ee-reg-email').value.trim(), password: el('e2ee-reg-password').value})
+      .then(function(d){ setMsg('e2ee-reg-msg', d.ok ? (d.notice||'注册成功') : (d.error||'注册失败'), d.ok); });
+  });
+})();
+</script>
+</body>
+</html>
+{% endif %}{# end if not fragment #}

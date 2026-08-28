@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}实验对比{% endblock %}
+{% block page_id %}compare{% endblock %}
+{% block page_bg %}background-color: var(--page-bg-red);{% endblock %}
+{% block topbar_style %}
+.topbar { background: var(--red); }
+.topbar-back { background: var(--white); color: var(--red); border-color: var(--white); }
+.topbar-back:hover { background: var(--red); color: var(--white); }
+{% endblock %}
+{% block content %}
+
+<h1 style="border-bottom:none;padding-bottom:0">实验对比</h1>
+<div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-bottom:1.5rem">
+  {% for exp in experiments %}
+  <span style="padding:0.25em 0.7em;font-size:0.78rem;font-weight:700;color:#fff;background:{{ exp._color }};border:2px solid var(--black)">{{ exp.id }}</span>
+  {% endfor %}
+</div>
+
+{% macro compare_section(label, field, type) %}
+{% set has_content = namespace(val=false) %}
+{% for exp in experiments %}
+  {% if type == 'text' and exp.get(field) %}{% set has_content.val = true %}{% endif %}
+  {% if type == 'list' and exp.get(field) %}{% set has_content.val = true %}{% endif %}
+  {% if type == 'table' and exp.get(field) %}{% set has_content.val = true %}{% endif %}
+  {% if type == 'obs' and exp.get('observations') is mapping and (exp.observations.get('items') or not exp.observations.get('no_anomalies')) %}{% set has_content.val = true %}{% endif %}
+  {% if type == 'results' and exp.get('results') is mapping and (exp.results.get('qualitative') or exp.results.get('key_data')) %}{% set has_content.val = true %}{% endif %}
+{% endfor %}
+
+{% if has_content.val %}
+<details class="section-group" open>
+  <summary style="border-bottom:3px solid var(--black)">{{ label }}</summary>
+  <div style="margin-top:0.5rem">
+  {% for exp in experiments %}
+  <div style="border-left:6px solid {{ exp._color }};padding-left:0.8rem;margin-bottom:0.8rem">
+    <small style="color:{{ exp._color }};font-weight:700">{{ exp.id }} &middot; {{ exp.date or '' }} &middot; <span class="status-badge status-{{ exp.status }}">{{ _status_labels.get(exp.status, exp.status) }}</span></small>
+    {% if type == 'text' %}
+      <div class="markdown-content">{{ exp.get(field, '') }}</div>
+    {% elif type == 'list' %}
+      {% set items = exp.get(field, []) %}
+      {% if items %}
+      <ol style="margin:0.3em 0;padding-left:1.2em;font-size:0.85rem">{% for item in items %}<li>{{ item }}</li>{% endfor %}</ol>
+      {% endif %}
+    {% elif type == 'table' %}
+      {% set rows = exp.get(field, []) %}
+      {% if rows %}
+      <table class="academic-table" style="font-size:0.78rem">
+        <thead><tr>{% for h in _table_headers[field] %}<th>{{ h }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for row in rows %}<tr>{% for k in _table_keys[field] %}<td>{{ row.get(k, '') if row is mapping else '' }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+      </table>
+      {% endif %}
+    {% elif type == 'obs' %}
+      {% set obs = exp.get('observations', {}) %}
+      {% if obs is mapping %}
+        {% if obs.get('no_anomalies') %}<p style="font-size:0.85rem;font-weight:700">未见异常</p>{% endif %}
+        {% if obs.get('items') %}<ul style="margin:0.2em 0;padding-left:1.2em;font-size:0.85rem">{% for item in obs.get('items', []) %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+      {% endif %}
+    {% elif type == 'results' %}
+      {% set r = exp.get('results', {}) %}
+      {% if r is mapping %}
+        {% if r.get('qualitative') %}<p style="font-size:0.85rem">{{ r.qualitative }}</p>{% endif %}
+        {% if r.get('key_data') %}
+        <table class="academic-table" style="font-size:0.78rem">
+          <thead><tr><th>指标</th><th>数值</th><th>对比对象</th><th>变化</th></tr></thead>
+          <tbody>{% for kd in r.key_data %}<tr><td>{{ kd.get('metric','') if kd is mapping else '' }}</td><td>{{ kd.get('value','') if kd is mapping else '' }}</td><td>{{ kd.get('comparison','') if kd is mapping else '' }}</td><td>{{ kd.get('change','') if kd is mapping else '' }}</td></tr>{% endfor %}</tbody>
+        </table>
+        {% endif %}
+      {% endif %}
+    {% endif %}
+  </div>
+  {% endfor %}
+  </div>
+</details>
+{% endif %}
+{% endmacro %}
+
+{% set _status_labels = {'planned': '计划中', 'running': '进行中', 'done': '已完成', 'failed': '失败', 'repeated': '复刻'} %}
+{% set _table_keys = {'materials': ['name','purity','vendor','amount','notes'], 'equipment': ['device','model','location'], 'experimental_plan': ['group','condition','expected'], 'process_parameters': ['step','parameter','setpoint','actual','deviation'], 'characterization': ['method','sample_id','preparation','submission_date','data_path']} %}
+{% set _table_headers = {'materials': ['名称','纯度','供应商','用量','备注'], 'equipment': ['设备','型号','位置'], 'experimental_plan': ['分组','条件','预期'], 'process_parameters': ['步骤','参数','设定值','实际值','偏差'], 'characterization': ['方法','样品','制样方式','送样日期','数据路径']} %}
+
+{{ compare_section("1. 实验目的", "purpose", "text") }}
+{{ compare_section("2. 材料", "materials", "table") }}
+{{ compare_section("3. 设备", "equipment", "table") }}
+{{ compare_section("4. 实验方案", "experimental_plan", "table") }}
+{{ compare_section("5. SOP", "sop", "list") }}
+{{ compare_section("6. 过程参数", "process_parameters", "table") }}
+{{ compare_section("7. 观察记录", "", "obs") }}
+{{ compare_section("8. 表征", "characterization", "table") }}
+{{ compare_section("9. 实验结果", "", "results") }}
+
+{% set has_conclusion = namespace(val=false) %}
+{% for exp in experiments %}{% if exp.get('conclusion') %}{% set has_conclusion.val = true %}{% endif %}{% endfor %}
+{% if has_conclusion.val %}
+<details class="section-group" open>
+  <summary style="border-bottom:3px solid var(--black)">10. 结论</summary>
+  <div style="margin-top:0.5rem">
+  {% for exp in experiments %}
+  {% if exp.get('conclusion') %}
+  <div style="border-left:6px solid {{ exp._color }};padding-left:0.8rem;margin-bottom:0.8rem">
+    <small style="color:{{ exp._color }};font-weight:700">{{ exp.id }}</small>
+    <div class="markdown-content">{{ exp.conclusion }}</div>
+  </div>
+  {% endif %}
+  {% endfor %}
+  </div>
+</details>
+{% endif %}
+
+{% set has_next = namespace(val=false) %}
+{% for exp in experiments %}{% if exp.get('next_steps') %}{% set has_next.val = true %}{% endif %}{% endfor %}
+{% if has_next.val %}
+<details class="section-group" open>
+  <summary style="border-bottom:3px solid var(--black)">11. 下一步</summary>
+  <div style="margin-top:0.5rem">
+  {% for exp in experiments %}
+  {% if exp.get('next_steps') %}
+  <div style="border-left:6px solid {{ exp._color }};padding-left:0.8rem;margin-bottom:0.8rem">
+    <small style="color:{{ exp._color }};font-weight:700">{{ exp.id }}</small>
+    <ol style="margin:0.2em 0;padding-left:1.2em;font-size:0.85rem">{% for ns in exp.next_steps %}<li>{{ ns }}</li>{% endfor %}</ol>
+  </div>
+  {% endif %}
+  {% endfor %}
+  </div>
+</details>
+{% endif %}
+
+<div style="text-align:center;margin-top:2rem">
+  <a href="/" role="button" class="outline">&larr; 返回首页</a>
+</div>
+
+{% endblock %}

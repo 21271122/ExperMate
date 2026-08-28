@@ -1,0 +1,11 @@
+id: spin-coating
+title: 旋涂法制膜
+category: 薄膜
+description: 旋涂法制备薄膜的标准实验记录，适用于钙钛矿/聚合物/氧化物薄膜制备
+tags:
+- thin-film
+- coating
+- spin-coating
+content: <p><strong>实验目的：</strong>采用旋涂法在【基底名称，如ITO玻璃/硅片】上制备【薄膜材料名称】薄膜，研究【变量，如转速/浓度/退火温度】对薄膜质量的影响。</p><p><strong>材料与试剂：</strong></p><ul><li>薄膜材料前驱体：【名称】，浓度【填写】mg/mL，溶剂【填写】</li><li>基底：【名称】，尺寸【填写，如2×2
+  cm】</li><li>其他试剂：【名称】，用途【填写】</li></ul><p><strong>基底预处理：</strong></p><ul><li>清洗方式：【超声清洗/UV臭氧处理/等离子清洗】</li><li>清洗步骤：【填写】</li></ul><p><strong>旋涂参数：</strong></p><ul><li>预转速：【填写】rpm，时间：【填写】秒</li><li>主转速：【填写】rpm，时间：【填写】秒</li><li>旋涂次数：【填写】层</li><li>每层中间处理：【退火/干燥】，温度【填写】°C，时间【填写】分钟</li></ul><p><strong>后处理：</strong></p><ul><li>退火温度：【填写】°C</li><li>退火时间：【填写】分钟</li><li>退火气氛：【空气/N2/真空】</li></ul><p><strong>实验步骤：</strong></p><ol><li>清洗基底并预处理</li><li>配制前驱体溶液，搅拌至澄清，过滤（如需）</li><li>将基底吸附在旋涂仪吸盘上</li><li>滴加前驱体溶液覆盖基底表面</li><li>启动旋涂程序：【预转参数】→【主转参数】</li><li>（多层膜）重复滴加和旋涂</li><li>退火处理</li></ol><p><strong>表征计划：</strong>膜厚测量
+  / SEM截面 / AFM / UV-Vis透过率 / 【其他】</p><p><strong>备注：</strong>【填写其他信息】</p>
