@@ -79,3 +79,15 @@ ExperMate 的项目代码采用 [Elastic License 2.0（ELv2）](LICENSE)。你�
 不要提交、公开上传或通过不可信渠道发送以下内容：`.env`、`config.yaml`、`data/` 目录、账号恢复材料和中继运行数据。
 
 同步用于让设备保持一致，不替代备份。升级、迁移或重装前，请按[数据、备份与恢复](docs/operations/data-and-backup.md)完成完整备份。
+
+## 反馈与支持
+
+感谢您的使用！这是主包的个人项目，有很多地方做得非常粗糙，诚邀您填写问卷，我会持续迭代！
+
+📋 [填写反馈问卷](https://v.wjx.cn/vm/PyP0GKm.aspx#)
+
+### Buy me some tokens
+
+本项目截至 2026 年 8 月底，共耗时 4 个月，消耗 60 亿+ tokens。如果觉得项目有帮助，可否小小补贴一下 token 的开销？
+
+![扫描二维码支持 ExperMate](static/img/support-qr.png)

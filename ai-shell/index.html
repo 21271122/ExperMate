@@ -106,6 +106,30 @@
   <button id="chat-float-btn" title="Open Chat" onclick="PanelManager.expandChat()">&#x2191;</button>
 </div>
 
+<!-- Support Modal: URL and QR are intentionally configured only after the maintainer provides them. -->
+<div id="support-modal" class="support-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="support-modal-title">
+  <section class="support-modal-dialog">
+    <header class="support-modal-head">
+      <span id="support-modal-title">支持小同门</span>
+      <button id="support-modal-close" class="support-modal-close" type="button" aria-label="关闭支持窗口">&times;</button>
+    </header>
+    <div class="support-modal-content">
+      <p class="support-modal-copy">感谢您的使用！这是主包的个人项目，有很多地方做得非常粗糙，诚邀您填写问卷，我会持续迭代！</p>
+      <a id="support-survey-link" class="support-survey-link" href="#" aria-disabled="true" tabindex="-1">问卷链接待接入</a>
+
+      <div class="support-modal-divider" aria-hidden="true"><span></span><span></span><span></span></div>
+
+      <h2 class="support-token-title">Buy me some tokens</h2>
+      <p class="support-modal-copy">本项目截至 2026 年 8 月底，共耗时 4 个月，消耗 60 亿+ tokens。如果觉得项目有帮助，可否小小补贴一下 token 的开销？</p>
+      <div class="support-qr-wrap">
+        <img id="support-qr" alt="支持 ExperMate 的收款二维码" hidden>
+        <span id="support-qr-placeholder" class="support-qr-placeholder">收款码待接入</span>
+      </div>
+      <label class="support-hide-option"><input id="support-hide-forever" type="checkbox">以后不再显示</label>
+    </div>
+  </section>
+</div>
+
 <!-- Account Modal -->
 <div id="account-modal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.5);align-items:center;justify-content:center">
   <div style="background:var(--white);border:6px solid var(--black);box-shadow:12px 12px 0 var(--shadow-color);width:340px;max-width:90vw">
@@ -222,6 +246,68 @@
 <script>
 (function() {
   "use strict";
+
+  // 维护者提供的公开反馈与支持入口。
+  var SUPPORT_SURVEY_URL = "https://v.wjx.cn/vm/PyP0GKm.aspx#";
+  var SUPPORT_QR_SRC = "/static/img/support-qr.png";
+  var SUPPORT_HIDE_KEY = "expermate_support_modal_hidden";
+
+  function supportHidden() {
+    try { return localStorage.getItem(SUPPORT_HIDE_KEY) === "1"; } catch (e) { return false; }
+  }
+  function setSupportHidden(hidden) {
+    try {
+      if (hidden) localStorage.setItem(SUPPORT_HIDE_KEY, "1");
+      else localStorage.removeItem(SUPPORT_HIDE_KEY);
+    } catch (e) {}
+  }
+  function configureSupportModal() {
+    var survey = document.getElementById("support-survey-link");
+    var qr = document.getElementById("support-qr");
+    var placeholder = document.getElementById("support-qr-placeholder");
+    if (SUPPORT_SURVEY_URL) {
+      survey.href = SUPPORT_SURVEY_URL;
+      survey.target = "_blank";
+      survey.rel = "noopener noreferrer";
+      survey.textContent = "填写反馈问卷";
+      survey.removeAttribute("aria-disabled");
+      survey.removeAttribute("tabindex");
+    } else {
+      survey.addEventListener("click", function(event) { event.preventDefault(); });
+    }
+    if (SUPPORT_QR_SRC) {
+      qr.src = SUPPORT_QR_SRC;
+      qr.hidden = false;
+      placeholder.hidden = true;
+    }
+  }
+  window.showSupportModal = function() {
+    if (supportHidden()) return;
+    var modal = document.getElementById("support-modal");
+    modal.style.display = "flex";
+    document.getElementById("support-modal-close").focus();
+  };
+  window.closeSupportModal = function() {
+    document.getElementById("support-modal").style.display = "none";
+  };
+  function initSupportModal() {
+    var brand = document.getElementById("chat-brand");
+    var close = document.getElementById("support-modal-close");
+    var hide = document.getElementById("support-hide-forever");
+    configureSupportModal();
+    hide.checked = supportHidden();
+    hide.addEventListener("change", function() { setSupportHidden(hide.checked); });
+    close.addEventListener("click", window.closeSupportModal);
+    brand.addEventListener("click", function(event) {
+      event.preventDefault();
+      // 双击的第一下仍立即回首页；第二下不重复播放首页转场。
+      if (event.detail !== 2) PanelManager.navigate("/");
+    });
+    brand.addEventListener("dblclick", function(event) {
+      event.preventDefault();
+      window.showSupportModal();
+    });
+  }
 
   // ---- 全局 fetch 拦截：自动注入 token ----
   (function() {
@@ -511,6 +597,7 @@
   // ---- Wiring ----
 
   PanelManager.init();
+  initSupportModal();
   ChatUI.init();
 
   AgentClient.init({

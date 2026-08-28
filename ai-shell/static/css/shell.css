@@ -48,6 +48,62 @@ html:root { scrollbar-gutter: auto; background: var(--white); }
 }
 #chat-brand .dot { width: 7px; height: 7px; background: var(--red); }
 
+/* ---- Project support modal ---- */
+
+.support-modal-overlay {
+  position: fixed; inset: 0; z-index: 10020; display: none;
+  align-items: center; justify-content: center; padding: 20px;
+  background: rgba(0, 0, 0, 0.56);
+}
+.support-modal-dialog {
+  width: min(440px, 100%); max-height: calc(100dvh - 40px); overflow: auto;
+  background: var(--white); color: var(--black); border: 6px solid var(--black);
+  box-shadow: 12px 12px 0 var(--shadow-color);
+}
+.support-modal-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 10px 15px; background: var(--black); color: var(--white);
+  font-size: 0.9rem; font-weight: 700; letter-spacing: 1px;
+}
+.support-modal-close {
+  border: 0; padding: 0; background: transparent; color: inherit;
+  font: 700 1.35rem/1 var(--font-sans); cursor: pointer;
+}
+.support-modal-content { padding: 18px 20px 20px; }
+.support-modal-copy { margin: 0; font-size: 0.88rem; line-height: 1.75; }
+.support-survey-link {
+  display: block; width: 100%; margin-top: 14px; padding: 9px 12px;
+  border: 3px solid var(--black); background: var(--blue); color: var(--white);
+  text-align: center; text-decoration: none; font-weight: 700; cursor: pointer;
+}
+.support-survey-link[aria-disabled="true"] {
+  background: var(--off-white); color: var(--gray); cursor: not-allowed;
+}
+.support-modal-divider {
+  display: flex; height: 4px; margin: 20px 0 15px;
+}
+.support-modal-divider span { flex: 1; }
+.support-modal-divider span:nth-child(1) { background: var(--red); }
+.support-modal-divider span:nth-child(2) { background: var(--yellow); }
+.support-modal-divider span:nth-child(3) { background: var(--blue); }
+.support-token-title { margin: 0 0 8px; font-size: 1rem; font-weight: 700; letter-spacing: 0.5px; }
+.support-qr-wrap {
+  display: grid; place-items: center; min-height: 180px; margin-top: 14px;
+  padding: 12px; border: 3px solid var(--black); background: var(--off-white);
+}
+.support-qr-wrap img { display: block; width: min(240px, 100%); height: auto; background: var(--white); }
+.support-qr-placeholder { font-size: 0.78rem; color: var(--gray); text-align: center; }
+.support-hide-option {
+  display: flex; align-items: center; gap: 0.5rem; margin-top: 18px;
+  font-size: 0.76rem; font-weight: 700; cursor: pointer;
+}
+.support-hide-option input { width: auto; accent-color: var(--blue); }
+
+@media (max-width: 600px) {
+  .support-modal-overlay { align-items: flex-start; padding: 34px 14px 14px; }
+  .support-modal-dialog { max-height: calc(100dvh - 48px); }
+}
+
 /* 品牌字母 */
 .brand-letters { display: inline-flex; gap: 0; }
 .brand-letters span { display: inline-block; transition: color 0.3s; }
