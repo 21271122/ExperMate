@@ -12,6 +12,7 @@ openpyxl>=3.1
 pypdf>=4.0
 pillow>=10.0
 pytesseract>=0.3
+tzdata>=2024.1
 pywebview>=5.0
 
 # Linux/macOS 生产部署使用；Windows 本地启动不需要它。

@@ -12,7 +12,7 @@ from lib.logger import init_logger, get_logger
 from lib.llm import LLMClient
 from lib.config import ConfigManager
 from lib.container import AppContext
-from lib.runtime_paths import prepare_runtime_data
+from lib.runtime_paths import app_root, prepare_runtime_data
 from lib.services.experiment import ExperimentService
 from lib.services.extraction import ExtractionService
 from lib.services.analysis import AnalysisService
@@ -37,13 +37,10 @@ from routes.api_auth import api_auth_bp
 from routes.api_sync import api_sync_bp
 from routes.fragments import fragments_bp
 
-# PyInstaller --onefile 兼容：exe 所在目录 vs 源码目录
-import sys as _sys
-if getattr(_sys, 'frozen', False):
-    _DATA_ROOT = Path(_sys.executable).parent
-else:
-    _DATA_ROOT = Path(__file__).parent
-BASE_DIR = _DATA_ROOT
+# 应用根目录：打包（sys.frozen）时 = exe 所在目录；源码运行时 = 项目根。
+# 统一走 lib/runtime_paths.app_root()——打包后 __file__ 位于 _internal，
+# 任何基于 __file__ 的根目录推导都会落错位置。
+BASE_DIR = app_root()
 SETTINGS_PATH = Path(os.environ.get("EXDIARY_SETTINGS", str(BASE_DIR / "config.yaml")))
 
 # 进程级配置与容器（全局状态唯一宿主，见 lib/config.py / lib/container.py）

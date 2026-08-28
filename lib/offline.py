@@ -5,12 +5,11 @@ import sqlite3
 from pathlib import Path
 
 from lib.repositories.sqlite_experiment import SqliteExperimentRepository
-from lib.runtime_paths import resolve_data_dir
+from lib.runtime_paths import app_root, resolve_data_dir
 
 
 def offline_db_path() -> Path:
-    project_root = Path(__file__).parent.parent
-    data_dir = resolve_data_dir(project_root)
+    data_dir = resolve_data_dir(app_root())
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir / "offline.db"
 

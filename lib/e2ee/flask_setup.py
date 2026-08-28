@@ -21,9 +21,11 @@ from lib.e2ee.recovery import RecordingMailSender, RecoveryService
 from lib.e2ee.service import AccountSecurityService
 from lib.e2ee.policy import canonicalize_email, validate_password
 from lib.e2ee import credstore
-from lib.runtime_paths import resolve_data_dir
+from lib.runtime_paths import app_root, resolve_data_dir
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# 打包后 __file__ 位于 _internal，必须用统一的 app_root() 推导，避免
+# 账号库与 KMS 密钥落进程序目录（升级/覆盖会丢数据）。
+_PROJECT_ROOT = app_root()
 _RUNTIME_DATA_DIR = resolve_data_dir(_PROJECT_ROOT)
 _ACCOUNT_DB = Path(os.environ.get("EXDIARY_ACCOUNT_DB", str(_RUNTIME_DATA_DIR / "_e2ee_accounts.db")))
 _KMS_KEY_FILE = Path(os.environ.get("EXDIARY_KMS_KEY_FILE", str(_RUNTIME_DATA_DIR / "_e2ee_kms.key")))
