@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ExperMate｜小同门 — 宣传动画（62s · 1:1）</title>
+<style>
+  /* ============================================================
+     ExperMate｜小同门 宣传动画（59 秒 · 1:1 · 单文件离线可用）
+     视觉语言复刻自仓库真实前端：
+     static/css/de-stijl.css、ai-shell/static/css/shell.css、
+     ai-shell/static/js/chat.js（消息 / 工具卡 / 输入区样式）。
+     ============================================================ */
+  :root{
+    --bk:#111; --white:#fff; --yw:#F8D030; --rd:#E32636; --bl:#1D54A6;
+    --off:#f4f4f4; --recordbg:#f2f4fd; --ok:#16a34a;
+    --ui:"Helvetica Neue","PingFang SC","Noto Sans SC","Microsoft YaHei",Arial,sans-serif;
+    --reading:"FangSong","FangSong_GB2312","STFangsong","仿宋",serif;
+    --mono:"Cascadia Mono",Consolas,"Courier New",monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased}
+  html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:var(--ui);color:var(--bk)}
+  #stage-wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#000}
+  #stage{position:relative;width:1920px;height:1920px;flex:none;overflow:hidden;
+    transform-origin:center center;background:var(--white)}
+  .sc{position:absolute;inset:0;opacity:0}
+  .sc.active{opacity:1;animation:sceneIn .55s cubic-bezier(.4,0,.2,1) both}
+  .sc.leaving{animation:sceneOut .5s ease both}
+  @keyframes sceneIn{from{opacity:0}to{opacity:1}}
+  @keyframes sceneOut{from{opacity:1}to{opacity:0}}
+  .tw{position:relative;white-space:pre-wrap}
+  .tw.on::after{content:"▍";margin-left:2px;color:var(--yw);animation:caret .5s steps(1) infinite}
+  @keyframes caret{50%{opacity:0}}
+  @keyframes popin{0%{opacity:0;transform:translateY(26px) scale(.985)}100%{opacity:1;transform:none}}
+  .pop{animation:popin .34s cubic-bezier(.16,1,.3,1) both}
+  @keyframes pulseY{0%,100%{background:var(--yw)}50%{background:#ffe98a}}
+  .pulseY{animation:pulseY .8s ease-in-out infinite}
+  #ctrl{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);
+    background:rgba(17,17,17,.88);border:1px solid #333;color:#eee;z-index:9999;
+    font-size:12px;font-family:var(--ui);border-radius:10px;padding:7px 10px 8px;
+    display:flex;align-items:center;gap:10px;transition:opacity .3s;user-select:none}
+  #ctrl.hidden{opacity:0;pointer-events:none}
+  #ctrl button{background:#2c2c2c;color:#fff;border:1px solid #555;border-radius:6px;
+    padding:4px 9px;cursor:pointer;font-size:12px}
+  #ctrl button:hover{background:#444}
+  #seg{display:flex;gap:3px}
+  #seg i{display:block;width:18px;height:13px;background:#333;cursor:pointer;border-radius:3px;position:relative}
+  #seg i b{position:absolute;inset:1px;border-radius:2px;transform:scaleX(0);transform-origin:left}
+  #tlab{font-variant-numeric:tabular-nums;min-width:82px;text-align:center}
+  #intro{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;
+    display:flex;align-items:center;justify-content:center}
+  #intro .box{background:var(--white);border:6px solid var(--bk);box-shadow:14px 14px 0 var(--bk);
+    padding:44px 58px;text-align:center;max-width:600px}
+  #intro h1{font-size:36px;font-weight:900;letter-spacing:2px;margin-bottom:6px}
+  #intro .slogan{font-size:16px;color:#555;margin-bottom:22px;font-weight:700}
+  #intro button{background:var(--yw);border:4px solid var(--bk);padding:14px 46px;font-size:24px;
+    font-weight:900;cursor:pointer;letter-spacing:4px}
+  #intro button:hover{background:var(--bk);color:var(--white)}
+  #intro .keys{font-size:12px;color:#888;margin-top:16px;line-height:1.9}
+</style>
+</head>
+<body>
+
+<div id="stage-wrap"><div id="stage"></div></div>
+
+<div id="intro">
+  <div class="box">
+    <h1>ExperMate｜小同门</h1>
+    <div class="slogan">你的实验记录伙伴 — 宣传动画（62s · 1:1）</div>
+    <button id="btnPlay">▶ 播 放</button>
+    <div class="keys">空格 暂停/播放 · ←→ ±0.1s · ↑↓ ±1s · R 重播<br>C 显示/隐藏控制条<br>建议：浏览器全屏（F11）后录屏，输出 1080×1080</div>
+  </div>
+</div>
+
+<div id="ctrl">
+  <button id="btnTogglePlay">▶</button>
+  <button id="btnRestart" title="R">↺</button>
+  <span id="tlab">00:00.0</span>
+  <span id="seg"></span>
+  <button id="btnHide" title="C">隐藏</button>
+</div>
+
+<script>
+/* =====================================================================
+   引擎：1920×1920 逻辑画布，12 场顺序播放（总 59.0s）。
+   画面由"本地时间"驱动（打字、显隐均确定性），支持任意跳帧回看。
+   ===================================================================== */
+var TOTAL = 61600;
+
+/* ---------- 基础工具 ---------- */
+function $(q){ return document.querySelector(q); }
+var UNITLESS = {opacity:1, zIndex:1, fontWeight:1, lineHeight:1, flex:1, flexGrow:1, flexShrink:1};
+function mk(tag, st, parent){
+  var n = document.createElement(tag);
+  if(st) for(var k in st){
+    var v = st[k];
+    if(typeof v === 'number' && !UNITLESS[k]) v = v + 'px';
+    n.style[k] = v;
+  }
+  if(parent) parent.appendChild(n);
+  return n;
+}
+
+/* =====================================================================
+   聊天界面复刻（ai-shell/static/css/shell.css + chat.js 视觉）
+   ===================================================================== */
+
+/* 顶栏：黑底品牌条 + 模式徽标 */
+function pageChrome(h, opt){
+  opt = opt || {};
+  var head = mk('div',{position:'absolute',left:0,top:0,right:0,height:120,background:'var(--bk)',
+    color:'var(--white)',display:'flex',alignItems:'center',gap:20,padding:'0 80px',zIndex:30},h);
+  var dot = mk('span',{width:18,height:18,background:'var(--rd)',flexShrink:0},head);
+  var brand = mk('div',{fontSize:44,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase'},head);
+  brand.textContent = 'ExperMate';
+  var badge = mk('span',{fontSize:30,fontWeight:700,letterSpacing:'1px',padding:'3px 18px',
+    border:'2px solid var(--white)',color:'var(--white)',display:'none'},head);
+  badge.textContent = '记录';
+  var auth = mk('span',{marginLeft:'auto',fontSize:34,fontWeight:700,opacity:.72},head);
+  auth.textContent = opt.auth || '刘老师';
+  return badge;
+}
+
+/* 聊天面板：消息区 + 四色分割线（随机运动）+ 输入区 */
+function chatFrame(h, opt){
+  opt = opt || {};
+  var badge = pageChrome(h, opt);
+  var panel = mk('div',{position:'absolute',left:0,top:120,width:'100%',height:1920-120,
+    background:'var(--white)',display:'flex',flexDirection:'column',overflow:'hidden',zIndex:10},h);
+  var fw = mk('div',{flex:1,overflow:'hidden',position:'relative'},panel);
+  fw.dataset.view = '1';
+  var feed = mk('div',{position:'absolute',left:0,top:0,width:'100%',display:'flex',flexDirection:'column',
+    gap:24,padding:'30px 80px 14px'},fw);
+  feed.dataset.feed = '1';
+  var cd = mk('div',{display:'flex',height:8,flexShrink:0,margin:'0 80px 10px'},panel);
+  var cdSpans = [];
+  ['var(--rd)','var(--white)','var(--yw)','var(--bl)'].forEach(function(c){
+    cdSpans.push(mk('span',{flex:1,background:c},cd));
+  });
+  function animCd(){
+    var parts=[Math.random()*70+8, Math.random()*70+8, Math.random()*70+8, Math.random()*70+8];
+    var total=parts.reduce(function(a,b){return a+b;},0);
+    cdSpans.forEach(function(s,i){
+      s.style.transition='flex-grow .8s cubic-bezier(.4,0,.2,1)';
+      s.style.flexGrow=(parts[i]/total*10).toFixed(2);
+    });
+  }
+  animCd();
+  h._cdTimer = setInterval(animCd, 800);
+  var inb = mk('div',{padding:'0 80px 34px',flexShrink:0,display:'flex',gap:22,alignItems:'center'},panel);
+  var wrap = mk('div',{flex:1,display:'flex',alignItems:'center',border:'4px solid var(--bk)',
+    padding:'12px 28px',background:'var(--white)'},inb);
+  var tarea = mk('div',{flex:1,fontSize:42,color:'#8f8f8f',fontWeight:600,minHeight:56,
+    display:'flex',alignItems:'center'},wrap);
+  tarea.textContent = opt.ph || '描述这次实验…';
+  var send = mk('div',{background:'var(--yw)',color:'var(--bk)',border:'4px solid var(--bk)',
+    padding:'12px 40px',fontSize:42,fontWeight:900,textTransform:'uppercase',letterSpacing:'2px'},inb);
+  send.textContent = '发送';
+  return {panel:panel, fw:fw, feed:feed, badge:badge};
+}
+
+function scrollFeed(fw, feed){
+  var view = fw.clientHeight;
+  var cont = feed.offsetHeight + 60;
+  var dy = Math.max(0, cont - view);
+  if(Math.abs((feed._dy||0) - dy) > 1){
+    feed.style.transition = 'transform .45s cubic-bezier(.2,.8,.2,1)';
+    feed.style.transform = 'translateY(' + (-dy) + 'px)';
+    feed._dy = dy;
+  }
+}
+
+/* 消息气泡：user 黑底白字右对齐；agent 浅底 + 阅读字体（ai-shell .msg-content） */
+function bubble(feed, role, full, rate){
+  var row = mk('div',{display:'flex',maxWidth:'82%',minWidth:0},feed);
+  if(role === 'user'){ row.style.alignSelf='flex-end'; row.style.justifyContent='flex-end'; }
+  var b = mk('div',{maxWidth:'100%',minWidth:0,fontSize:46,lineHeight:1.55,
+    overflowWrap:'anywhere',wordBreak:'break-word'},row);
+  if(role === 'user'){
+    b.style.background='var(--bk)'; b.style.color='var(--white)';
+    b.style.border='4px solid var(--bk)'; b.style.padding='14px 28px'; b.style.fontWeight=600;
+    b.style.fontFamily='var(--ui)';
+  } else {
+    b.style.background='var(--off)'; b.style.color='var(--bk)';
+    b.style.border='2px solid var(--bk)';
+    b.style.padding='14px 26px'; b.style.fontFamily='var(--reading)';
+  }
+  if(full != null){
+    b.classList.add('tw'); b.dataset.full = full; b.dataset.rate = rate||14;
+    b.textContent=''; b.dataset.ts = 0;
+  }
+  return b;
+}
+
+/* 系统消息（schema 状态，真实存在的 .schema-status） */
+function systemMsg(feed, text){
+  var row = mk('div',{width:'100%'},feed);
+  var s = mk('div',{fontSize:34,fontWeight:700,padding:'12px 24px',border:'2px solid var(--bk)',
+    background:'var(--off)',color:'var(--bk)',display:'inline-block',maxWidth:'100%'},row);
+  s.textContent = text;
+  return s;
+}
+
+/* 工具卡（ai-shell .tool-card） */
+function toolCard(feed, header, color, bodyFn){
+  var wrap = mk('div',{width:'100%'},feed);
+  wrap.className='pop';
+  var card = mk('div',{background:'var(--white)',color:'var(--bk)',border:'4px solid var(--bk)',
+    overflow:'hidden',boxShadow:'6px 6px 0 var(--bk)'},wrap);
+  if(color) card.style.borderLeft='8px solid '+color;
+  if(header){
+    var hd = mk('div',{background:'var(--off)',color:'var(--bk)',padding:'12px 28px',fontSize:28,
+      fontWeight:700,textTransform:'uppercase',letterSpacing:'2px',borderBottom:'2px solid var(--bk)'},card);
+    hd.textContent = header;
+  }
+  var body = mk('div',{padding:'20px 28px',fontSize:40,lineHeight:1.55,fontWeight:600,color:'var(--bk)'},card);
+  if(bodyFn) bodyFn(body, card);
+  return {wrap:wrap, card:card, body:body};
+}
+/* 工具卡底部操作按钮（ai-shell .tool-card-btn） */
+function btnFoot(card, text){
+  var f = mk('div',{padding:'14px 28px',borderTop:'2px solid var(--bk)',background:'var(--off)'},card);
+  var b = mk('div',{display:'inline-block',background:'var(--bk)',color:'var(--white)',
+    border:'2px solid var(--bk)',padding:'8px 24px',fontSize:28,fontWeight:900,
+    textTransform:'uppercase',letterSpacing:'1px'},f);
+  b.textContent = text;
+  return f;
+}
+/* 改动卡（真实存在的 Modified Experiment 卡：旧值划线 → 新值加粗） */
+function diffCard(feed, rows){
+  var card = toolCard(feed, 'Modified Experiment', 'var(--bl)', function(body){
+    rows.forEach(function(r){
+      var row = mk('div',{display:'flex',alignItems:'baseline',gap:14,padding:'5px 0'},body);
+      var df = mk('span',{fontWeight:700,minWidth:150,fontSize:28,textTransform:'uppercase'},row);
+      df.textContent = r.field;
+      var doEl = mk('span',{textDecoration:'line-through',opacity:.45},row);
+      doEl.textContent = r.old;
+      var arr = mk('span',{opacity:.5},row); arr.textContent='→';
+      var dn = mk('span',{fontWeight:800},row);
+      dn.textContent = r.nv;
+    });
+  });
+  return card;
+}
+function reveal(el, at, kind){
+  el.dataset.show = at;
+  if(kind==='slam') el.dataset.slam = 1;
+}
+function setTw(el, full, at, rate){
+  el.classList.add('tw'); el.dataset.full = full; el.dataset.rate = rate||14;
+  el.textContent=''; el.dataset.ts = at;
+}
+
+/* =====================================================================
+   场景元数据（12 场，总 59s）
+   ===================================================================== */
+var SCENES = [
+  {id:'title',   s:0,     e:3000,  bg:'#fff'},
+  {id:'pains',   s:3000,  e:9000,  bg:'#fff'},
+  {id:'pivot',   s:9000,  e:11200, bg:'#fff'},
+  {id:'inter1',  s:11200, e:13000, bg:'#f4f4f4'},
+  {id:'rec',     s:13000, e:22000, bg:'#fff'},
+  {id:'inter2',  s:22000, e:23800, bg:'#f4f4f4'},
+  {id:'retrieve',s:23800, e:33400, bg:'#fff'},
+  {id:'inter3',  s:33400, e:35200, bg:'#f4f4f4'},
+  {id:'reuse',   s:35200, e:42700, bg:'#fff'},
+  {id:'inter4',  s:42700, e:44500, bg:'#f4f4f4'},
+  {id:'attach',  s:44500, e:51500, bg:'#fff'},
+  {id:'end',     s:51500, e:61600, bg:'#fff'}
+];
+
+/* =====================================================================
+   场景构建
+   ===================================================================== */
+
+/* 0 · 开场 */
+function bTitle(h){
+  var c = mk('div',{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',
+    flexDirection:'column'},h);
+  var l1 = mk('div',{fontWeight:900,fontSize:140,color:'var(--bk)'},c);
+  setTw(l1,'实验做完了——',650,120);
+  var box = mk('div',{background:'var(--rd)',border:'8px solid var(--bk)',boxShadow:'14px 14px 0 var(--bk)',
+    marginTop:100,padding:'28px 96px',opacity:0},c);
+  reveal(box, 2150);
+  var b1 = mk('div',{fontWeight:900,fontSize:140,color:'#fff',letterSpacing:'2px'},box);
+  b1.textContent='立即记录？先欠着？';
+  return {run:[],defTick:null};
+}
+
+/* 1 · 痛点四连（2×2，文案简洁、痛点高亮） */
+function bPains(h){
+  var wrap = mk('div',{position:'absolute',inset:0,display:'flex',flexDirection:'column',
+    justifyContent:'center',gap:64,padding:'0 280px 40px'},h);
+  var pains = [
+    {sub:'潦草简写', pain:'日后看不懂', c:'#F8D030', tc:'#111', at:300},
+    {sub:'只改一个数', pain:'重抄整页', c:'#E32636', tc:'#fff', at:1600},
+    {sub:'图和数据', pain:'对不上号', c:'#1D54A6', tc:'#fff', at:2900},
+    {sub:'记录分散', pain:'关键时刻找不到', c:'#111111', tc:'#fff', at:4200}
+  ];
+  [ [pains[0],pains[1]], [pains[2],pains[3]] ].forEach(function(row){
+    var line = mk('div',{display:'flex',gap:64},wrap);
+    row.forEach(function(r){
+      var card = mk('div',{flex:1,minWidth:0,background:'var(--white)',border:'8px solid var(--bk)',
+        boxShadow:'12px 12px 0 var(--bk)',display:'flex',flexDirection:'column',overflow:'hidden',opacity:0},line);
+      reveal(card, r.at, 'slam');
+      var band = mk('div',{height:18,background:r.c,flexShrink:0},card);
+      var content = mk('div',{flex:1,display:'flex',flexDirection:'column',alignItems:'center',
+        justifyContent:'center',gap:18,padding:'34px 28px'},card);
+      var s = mk('div',{fontSize:44,fontWeight:800,color:'#666'},content);
+      s.textContent = r.sub;
+      var p = mk('div',{fontSize:70,fontWeight:900,background:r.c,color:r.tc,
+        padding:'8px 28px'},content);
+      p.textContent = r.pain;
+    });
+  });
+  return {run:[],defTick:null};
+}
+
+/* 2 · 转折 */
+function bPivot(h){
+  var c = mk('div',{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',
+    flexDirection:'column'},h);
+  var l1 = mk('div',{fontWeight:900,fontSize:150,color:'var(--bk)'},c);
+  setTw(l1,'如果记录，',300,125);
+  var box = mk('div',{background:'var(--yw)',border:'8px solid var(--bk)',boxShadow:'14px 14px 0 var(--bk)',
+    marginTop:110,padding:'32px 96px',opacity:0},c);
+  reveal(box, 1500);
+  var b1 = mk('div',{fontWeight:900,fontSize:160,color:'var(--bk)'},box);
+  b1.textContent='交给 AI 代劳？';
+  return {run:[],defTick:null};
+}
+
+/* 幕间提示（仅保留提示语：三色条 + 大字） */
+function bInter(h, text){
+  var c = mk('div',{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',
+    flexDirection:'column'},h);
+  var bar = mk('div',{display:'flex',width:200,height:12,marginBottom:46,opacity:0},c);
+  ['var(--rd)','var(--yw)','var(--bl)'].forEach(function(col){ mk('span',{flex:1,background:col},bar); });
+  reveal(bar, 200);
+  var big = mk('div',{fontWeight:900,fontSize:104,color:'var(--bk)',textAlign:'center',letterSpacing:'2px',
+    maxWidth:'1500px',opacity:0},c);
+  big.textContent = text;
+  reveal(big, 550);
+  return {run:[],defTick:null};
+}
+function bInter1(h){ return bInter(h, '随口一记，自动成规范记录'); }
+function bInter2(h){ return bInter(h, '潦草记录，一句话翻出来'); }
+function bInter3(h){ return bInter(h, '只改一处，不必重抄'); }
+function bInter4(h){ return bInter(h, '图表数据，挂到实验上'); }
+
+/* 3 · 对话即记录（9s） */
+function bRec(h){
+  var cf = chatFrame(h,{});
+  cf.badge.style.display='inline-block';
+  var run = [];
+  var U1 = '做了个水热合成，120°C 一晚，600°C 烧 30 分钟。';
+  run.push({at:300, fn:function(){
+    var b=bubble(cf.feed,'user',U1,10); b.dataset.ts = 400;
+    scrollFeed(cf.fw,cf.feed);
+  }});
+  run.push({at:1600, fn:function(){
+    cf.panel.style.background='var(--recordbg)';
+    cf.fw.style.background='var(--recordbg)';
+    var b=bubble(cf.feed,'agent','好的老师，我边听边整理成结构化记录——',13);
+    b.dataset.ts = 1700;
+  }});
+  run.push({at:2900, fn:function(){
+    var s=systemMsg(cf.feed,'已收录：标题 · 材料 · 过程参数 · SOP');
+    reveal(s, 3050);
+  }});
+  run.push({at:4100, fn:function(){
+    var b=bubble(cf.feed,'agent','还差“实验目的”，方便补一句吗？',13);
+    b.dataset.ts = 4200;
+  }});
+  run.push({at:5000, fn:function(){
+    var b=bubble(cf.feed,'user','目的：看铈锌比对结构的影响。',10);
+    b.dataset.ts = 5100;
+  }});
+  run.push({at:5800, fn:function(){
+    var b=bubble(cf.feed,'agent','收到，我现在生成并保存这条记录。',12);
+    b.dataset.ts = 5900;
+  }});
+  run.push({at:7600, fn:function(){
+    var card = toolCard(cf.feed,'Experiment Generated','var(--bl)',function(body){
+      var t1 = mk('div',{fontSize:44,fontWeight:900},body);
+      t1.innerHTML='<span style="font-family:var(--mono)">2026-FTV4-001</span> — 水热合成制备锌铈复合氧化物粉末';
+    });
+    btnFoot(card.card,'View Experiment →');
+    scrollFeed(cf.fw,cf.feed);
+  }});
+  return {run:run, defTick:function(){ scrollFeed(cf.fw,cf.feed); }};
+}
+
+/* 4 · 模糊检索过往记录（8.8s：翻阅记录 → 回答 → 询问补全 → diff 改动卡） */
+function bRetrieve(h){
+  var cf = chatFrame(h,{});
+  var run = [];
+  var U1 = '我翻到一条旧记录，只写了“2h · 90° · +B · 过夜”，这是啥实验？';
+  run.push({at:300, fn:function(){
+    var b=bubble(cf.feed,'user',U1,11); b.dataset.ts=400;
+  }});
+  run.push({at:2600, fn:function(){
+    var b=bubble(cf.feed,'agent','我去翻一下当时的聊天记录。',12);
+    b.dataset.ts=2700;
+  }});
+  run.push({at:4900, fn:function(){
+    var b=bubble(cf.feed,'agent','找到了：90°C 过夜的水热合成，「+B」是硼酸，「2h」是搅拌 2 小时。来源：2026-K7D2-007 的对话记录。',12);
+    b.dataset.ts=5000;
+  }});
+  run.push({at:6100, fn:function(){
+    var b=bubble(cf.feed,'agent','这条写得比较简略，要不要我帮你补充详细一些？',12);
+    b.dataset.ts=6200;
+  }});
+  run.push({at:7000, fn:function(){
+    var b=bubble(cf.feed,'user','好，补一下吧。',10);
+    b.dataset.ts=7100;
+  }});
+  run.push({at:8200, fn:function(){
+    diffCard(cf.feed, [
+      {field:'条件', old:'90° 过夜', nv:'90°C 水热 12 h'},
+      {field:'材料', old:'+B', nv:'加入硼酸'},
+      {field:'步骤', old:'2h', nv:'搅拌 2 h'}
+    ]);
+    scrollFeed(cf.fw,cf.feed);
+  }});
+  return {run:run, defTick:function(){ scrollFeed(cf.fw,cf.feed); }};
+}
+
+/* 5 · 结构复用（7.5s） */
+function bReuse(h){
+  var cf = chatFrame(h,{});
+  cf.badge.style.display='inline-block';
+  var run = [];
+  var U1='再做一炉，跟 2026-FTV4-001 一样，就煅烧温度改成 700°C。';
+  run.push({at:300, fn:function(){
+    var b=bubble(cf.feed,'user',U1,10); b.dataset.ts=400;
+  }});
+  run.push({at:1600, fn:function(){
+    var b=bubble(cf.feed,'agent','好的，我先调出 001，其余字段直接继承。',12);
+    b.dataset.ts=1700;
+  }});
+  run.push({at:2900, fn:function(){
+    var s=systemMsg(cf.feed,'已继承：材料 · 步骤 · 参数（仅煅烧温度不同）');
+    reveal(s, 3050);
+  }});
+  run.push({at:4200, fn:function(){
+    var b=bubble(cf.feed,'agent','好，已按 700°C 生成并保存，其余与 001 一致。',12);
+    b.dataset.ts=4300;
+  }});
+  run.push({at:6000, fn:function(){
+    var card = toolCard(cf.feed,'Experiment Generated','var(--bl)',function(body){
+      var t1 = mk('div',{fontSize:44,fontWeight:900},body);
+      t1.innerHTML='<span style="font-family:var(--mono)">2026-FTV4-002</span> — 水热合成制备锌铈复合氧化物粉末';
+    });
+    btnFoot(card.card,'View Experiment →');
+    scrollFeed(cf.fw,cf.feed);
+  }});
+  return {run:run, defTick:function(){ scrollFeed(cf.fw,cf.feed); }};
+}
+
+/* 6 · 附件关联（7s） */
+function bAttach(h){
+  var cf = chatFrame(h,{});
+  cf.badge.style.display='inline-block';
+  var run = [];
+  run.push({at:300, fn:function(){
+    var b=bubble(cf.feed,'user','把 XRD 数据和图谱，关联到刚才那条实验上。',11);
+    b.dataset.ts=400;
+    var chipsRow = mk('div',{display:'flex',gap:12,flexWrap:'wrap',marginTop:16,alignSelf:'flex-end'},cf.feed);
+    var c1 = mk('div',{fontSize:28,fontWeight:700,border:'2px solid var(--bk)',padding:'8px 16px',
+      background:'var(--white)',color:'var(--bk)',opacity:0},chipsRow);
+    c1.textContent='📎 XRD-图谱.png'; reveal(c1, 1200);
+    var c2 = mk('div',{fontSize:28,fontWeight:700,border:'2px solid var(--bk)',padding:'8px 16px',
+      background:'var(--white)',color:'var(--bk)',opacity:0},chipsRow);
+    c2.textContent='📎 XRD-数据表.xlsx'; reveal(c2, 1500);
+  }});
+  run.push({at:2800, fn:function(){
+    var b=bubble(cf.feed,'agent','好，已关联到 2026-FTV4-002。',12);
+    b.dataset.ts=2900;
+  }});
+  run.push({at:4300, fn:function(){
+    var b=bubble(cf.feed,'agent','以后查“那批 XRD”，附件会跟着实验一起出来。',12);
+    b.dataset.ts=4400;
+  }});
+  return {run:run, defTick:function(){ scrollFeed(cf.fw,cf.feed); }};
+}
+
+/* 7 · 尾板 */
+function bEnd(h){
+  var bottom = mk('div',{position:'absolute',left:0,right:0,bottom:0,height:92,background:'var(--bk)',
+    display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 116px'},h);
+  var bl = mk('span',{color:'#fff',fontWeight:900,fontSize:30,letterSpacing:'3px'},bottom);
+  bl.textContent='ExperMate｜小同门';
+  var br = mk('span',{color:'var(--yw)',fontWeight:900,fontSize:28,letterSpacing:'4px'},bottom);
+  br.textContent='SYSTEM ONLINE';
+  var c = mk('div',{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',
+    flexDirection:'column',paddingBottom:130},h);
+  var logo = mk('div',{display:'flex',alignItems:'baseline',opacity:0},c);
+  reveal(logo, 350);
+  var nm = mk('span',{fontWeight:900,fontSize:170,letterSpacing:'1px',color:'var(--bk)'},logo);
+  nm.textContent='ExperMate';
+  var cn = mk('span',{fontWeight:900,fontSize:150,background:'var(--yw)',border:'8px solid var(--bk)',
+    padding:'6px 44px',marginLeft:48,color:'var(--bk)'},logo);
+  cn.textContent='小同门';
+  var sl = mk('div',{marginTop:90,fontWeight:800,fontSize:68,color:'#333'},c);
+  setTw(sl,'你的实验记录伙伴',800,100);
+  var chipsRow = mk('div',{display:'flex',gap:28,marginTop:70},c);
+  var chips=['对话即记录','只写不同','附件贴实验'];
+  chips.forEach(function(ch,i){
+    var p = mk('div',{border:'6px solid var(--bk)',padding:'18px 56px',fontSize:52,fontWeight:900,
+      display:'inline-block',opacity:0,background:i===1?'var(--yw)':'var(--white)',
+      boxShadow:'8px 8px 0 var(--bk)'},chipsRow);
+    p.textContent=ch;
+    reveal(p, 2200 + i*480);
+  });
+  return {run:[],defTick:null};
+}
+
+/* =====================================================================
+   确定性 paint：以本地时间 t 驱动显隐 / 打字
+   ===================================================================== */
+function paintScene(host, t){
+  var els = host.querySelectorAll('[data-show]'), i, el, at, k;
+  for(i=0;i<els.length;i++){
+    el = els[i]; at = parseFloat(el.dataset.show);
+    k = Math.min(1, Math.max(0, (t - at)/240));
+    el.style.opacity = k;
+    el.style.transform = (k>=1 || !el.dataset.slam) ? (k>=1?'none':'translateY(14px)')
+      : 'translateX(' + (70*(1-k)) + 'px)';
+  }
+  var tws = host.querySelectorAll('.tw');
+  for(i=0;i<tws.length;i++){
+    var tw = tws[i];
+    var start = parseFloat(tw.dataset.ts);
+    if(isNaN(start)) continue;
+    var rate = parseFloat(tw.dataset.rate)||14;
+    var full = tw.dataset.full||'';
+    var n = Math.floor((t - start)/rate);
+    if(n >= full.length){
+      tw.textContent = full; tw.classList.remove('on');
+    } else {
+      tw.textContent = full.slice(0, Math.max(0,n));
+      tw.classList.add('on');
+    }
+  }
+}
+
+/* =====================================================================
+   场景路由 / 重建 / 主循环
+   ===================================================================== */
+var stage = $('#stage');
+var BUILDERS = {title:bTitle, pains:bPains, pivot:bPivot,
+  inter1:bInter1, rec:bRec, inter2:bInter2, retrieve:bRetrieve,
+  inter3:bInter3, reuse:bReuse, inter4:bInter4, attach:bAttach, end:bEnd};
+
+function resize(){
+  var s = Math.min(window.innerWidth/1920, window.innerHeight/1920);
+  stage.style.transform = 'scale(' + s + ')';
+}
+window.addEventListener('resize', resize); resize();
+
+var time = 0, playing = false, lastTs = null;
+var hosts = {}, activeId = null, data = {};
+
+function sceneAt(t){
+  for(var i=0;i<SCENES.length;i++)
+    if(t >= SCENES[i].s && t < SCENES[i].e) return SCENES[i];
+  return SCENES[SCENES.length-1];
+}
+function buildScene(sc){
+  if(activeId && hosts[activeId]){
+    var old = hosts[activeId];
+    if(old._cdTimer){ clearInterval(old._cdTimer); }
+    old.classList.remove('active');
+    old.classList.add('leaving');
+    (function(o){ setTimeout(function(){ if(o.parentNode) o.parentNode.removeChild(o); }, 560); })(old);
+    delete hosts[activeId];
+  }
+  var host = mk('div',{position:'absolute',inset:0,background:sc.bg});
+  host.className='sc active';
+  host.dataset.scene = sc.id;
+  stage.appendChild(host);
+  hosts[sc.id]=host; activeId=sc.id;
+  var fn = BUILDERS[sc.id];
+  data[sc.id] = fn ? (fn(host)||{}) : {};
+}
+function tick(t){
+  var sc = sceneAt(t);
+  if(!hosts[sc.id]) buildScene(sc);
+  else if(data[sc.id]._last != null && (t - sc.s) < data[sc.id]._last - 60){
+    buildScene(sc);
+  }
+  data[sc.id]._last = t - sc.s;
+  paintScene(hosts[sc.id], t - sc.s);
+  var d = data[sc.id];
+  if(d.run){
+    for(var i=d._idx||0;i<d.run.length && d.run[i].at <= (t-sc.s);i++){
+      d.run[i].fn(); d._idx = i+1;
+    }
+  }
+  if(d.defTick) d.defTick();
+}
+function frame(ts){
+  if(lastTs == null) lastTs = ts;
+  var dt = playing ? (ts - lastTs) : 0;
+  lastTs = ts;
+  if(playing){
+    time += dt;
+    if(time >= TOTAL){ time = TOTAL; playing = false; updateUI(); ctrl.classList.remove('hidden'); }
+    tick(time);
+    updateUI();
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---------- 控制 UI ---------- */
+var segEls = [];
+function buildSeg(){
+  var seg = $('#seg'); seg.innerHTML=''; segEls=[];
+  var cols = ['#F8D030','#E32636','#1D54A6','#555555','#17b26a','#555555','#17b26a','#555555','#17b26a','#555555','#17b26a','#F8D030'];
+  SCENES.forEach(function(s,i){
+    var el = document.createElement('i');
+    var b = document.createElement('b');
+    b.style.background = cols[i];
+    el.appendChild(b);
+    el.title = s.id;
+    (function(st){ el.addEventListener('click',function(){ seek(st.s+120); }); })(s);
+    seg.appendChild(el);
+    segEls.push({i:el,b:b,s:s});
+  });
+}
+function updateUI(){
+  var cur = sceneAt(time);
+  segEls.forEach(function(x){
+    var k = Math.max(0,Math.min(1,(time-x.s.s)/(x.s.e-x.s.s)));
+    x.b.style.transform='scaleX('+k+')';
+    if(x.i.classList.contains('on') !== (x.s.id===cur.id))
+      x.i.classList.toggle('on', x.s.id===cur.id);
+  });
+  var m = Math.floor(time/60000), sec=(time%60000)/1000;
+  $('#tlab').textContent = (m<10?'0':'')+m+':'+((sec<10?'0':'')+sec.toFixed(1));
+}
+function seek(t){
+  time = Math.max(0, Math.min(TOTAL-1, t));
+  tick(time); updateUI();
+}
+var btnToggle = $('#btnTogglePlay');
+function setPlay(p){
+  playing = p;
+  btnToggle.textContent = p ? '⏸' : '▶';
+  if(p) lastTs = null;
+}
+function hideIntro(){ $('#intro').style.display='none'; $('#ctrl').classList.remove('hidden'); }
+$('#btnPlay').addEventListener('click', function(){
+  hideIntro();
+  setPlay(true); scheduleHide();
+});
+$('#btnRestart').addEventListener('click', function(){ seek(0); setPlay(true); scheduleHide(); });
+var ctrl = $('#ctrl'), hideTimer=null;
+function scheduleHide(){
+  clearTimeout(hideTimer);
+  if(playing) hideTimer = setTimeout(function(){ ctrl.classList.add('hidden'); }, 2600);
+}
+function toggleCtrl(){ clearTimeout(hideTimer); ctrl.classList.toggle('hidden'); }
+$('#btnHide').addEventListener('click', toggleCtrl);
+ctrl.addEventListener('mouseenter', function(){ clearTimeout(hideTimer); });
+ctrl.addEventListener('mouseleave', function(){ if(playing) scheduleHide(); });
+document.addEventListener('keydown', function(e){
+  switch(e.key){
+    case ' ': e.preventDefault(); setPlay(!playing); scheduleHide(); break;
+    case 'ArrowRight': e.preventDefault(); seek(time+100); break;
+    case 'ArrowLeft':  e.preventDefault(); seek(time-100); break;
+    case 'ArrowUp':    e.preventDefault(); seek(time+1000); break;
+    case 'ArrowDown':  e.preventDefault(); seek(time-1000); break;
+    case 'r': case 'R': seek(0); setPlay(true); scheduleHide(); break;
+    case 'c': case 'C': toggleCtrl(); break;
+  }
+});
+buildSeg();
+tick(0);
+(function(){
+  var h = location.hash || '';
+  if(/auto/.test(h)){ hideIntro(); setPlay(true); }
+  var m = /t=(\d+)/.exec(h);
+  if(m){ hideIntro(); seek(parseInt(m[1],10)); }
+})();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
