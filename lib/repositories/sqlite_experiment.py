@@ -267,6 +267,34 @@ class SqliteExperimentRepository(AbstractExperimentRepository, UserScopeMixin):
         ).fetchall()
         return [_row_to_dict(r) for r in rows]
 
+    def list_page(self, page: int = 1, page_size: int = 20, query: str = "",
+                  status: str = "", include_archived: bool = False) -> dict[str, Any]:
+        """服务端筛选与分页，仅返回列表摘要；完整内容按 ID 读取。"""
+        clauses = ["user_id = ?"]
+        params: list[Any] = [self._uid()]
+        if not include_archived:
+            clauses.append("archived = 0")
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if query:
+            escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            fields = ("id", "title", "experimenter", "tags", "purpose", "conclusion")
+            clauses.append("(" + " OR ".join(f"{field} LIKE ? ESCAPE '\\'" for field in fields) + ")")
+            params.extend([f"%{escaped}%"] * len(fields))
+        where = " AND ".join(clauses)
+        total = self.db.execute(
+            f"SELECT COUNT(*) FROM experiments WHERE {where}", params,
+        ).fetchone()[0]
+        rows = self.db.execute(
+            "SELECT id, title, date, experimenter, status, tags, archived, revision, "
+            f"substr(purpose, 1, 200) AS purpose FROM experiments WHERE {where} "
+            "ORDER BY date DESC, id DESC LIMIT ? OFFSET ?",
+            [*params, page_size, (page - 1) * page_size],
+        ).fetchall()
+        return {"items": [_row_to_dict(row) for row in rows], "total": total,
+                "page": page, "page_size": page_size}
+
     def list_for_list_view(self, include_archived: bool = False) -> list[dict[str, Any]]:
         """实验列表首屏与本地筛选所需字段，避免传输完整实验正文。"""
         rows = self.db.execute(

@@ -50,6 +50,12 @@ python app.py --headless
 
 默认网页地址：<http://127.0.0.1:5000>
 
+### React 前端
+
+默认 `/` 及各页面深链接已使用 React，`/app/` 保留为同一应用的别名。外壳、账号、聊天、实验列表/详情/编辑、分析报告、时间线、模板、对比、设置和预览已迁移，继续使用原双栏、Canvas、CSS、字体和动效。
+
+首次启动前需要 Node.js 22.12+，在 `frontend/` 目录执行 `npm ci`、`npm run build`，再启动 Python 服务。部署必须包含构建后的 `frontend/dist/`；缺少构建时页面返回明确的 503 提示。开发与验收见 [React 前端说明](frontend/README.md)，后续服务端集中化见 [服务端与 React 重构方案](docs/server-react-refactoring-plan.md)。
+
 ## 数据与模型服务
 
 - 实验、聊天、附件和设置默认保存在本机；

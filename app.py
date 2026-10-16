@@ -4,8 +4,6 @@ import socket
 import threading
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
-from urllib.request import Request, urlopen
 from flask import Flask, g, request
 
 from lib.logger import init_logger, get_logger
@@ -35,7 +33,7 @@ from routes.uploads import uploads_bp
 from routes.pages import pages_bp
 from routes.api_auth import api_auth_bp
 from routes.api_sync import api_sync_bp
-from routes.fragments import fragments_bp
+from routes.api_v1 import api_v1_bp
 
 # 应用根目录：打包（sys.frozen）时 = exe 所在目录；源码运行时 = 项目根。
 # 统一走 lib/runtime_paths.app_root()——打包后 __file__ 位于 _internal，
@@ -340,6 +338,9 @@ def create_app():
             except Exception:
                 pass
         is_online = g.user_id is not None
+        # React 重构保留现有离线工作区；仅在未提供凭据且确有独立离线库时显式放行。
+        # 已过期/失效的凭据不能在同一请求中静默切换数据作用域。
+        g.frontend_offline = not token and not is_online and exp_repo_offline is not None
         g.config = config
         g.config_manager = config_manager
         g.exp_repo = exp_repo if is_online else (exp_repo_offline or exp_repo)
@@ -400,7 +401,7 @@ def create_app():
     app.register_blueprint(api_music_bp, url_prefix="/api")
     app.register_blueprint(api_auth_bp, url_prefix="/api/auth")
     app.register_blueprint(api_sync_bp, url_prefix="/api")
-    app.register_blueprint(fragments_bp)
+    app.register_blueprint(api_v1_bp, url_prefix="/api/v1")
 
     # ---- e2ee 认证（可选接入：依赖缺失时自动跳过，不阻断启动） ----
     try:
@@ -469,14 +470,21 @@ if __name__ == "__main__":
         class DesktopAttachmentApi:
             """供 pywebview 调用系统“另存为”窗口，避免 Blob 下载在桌面端失效。"""
 
-            def save_attachment(self, url: str, filename: str, token: str) -> dict[str, Any]:
-                parsed = urlparse(url)
-                if parsed.hostname not in {"127.0.0.1", "localhost"} or not parsed.path.startswith("/api/attachments/"):
-                    return {"ok": False, "error": "无效的附件下载地址"}
+            def save_attachment_data(self, filename: str, encoded_content: str) -> dict[str, Any]:
+                """React 先用 HttpOnly Cookie 读取附件，桥接只接收已授权的文件内容。"""
+                import base64
                 try:
-                    headers = {"Authorization": f"Bearer {token}"} if token else {}
-                    with urlopen(Request(url, headers=headers), timeout=60) as response:
-                        content = response.read()
+                    if len(encoded_content) > 24 * 1024 * 1024:
+                        raise ValueError("附件超过 16 MB")
+                    content = base64.b64decode(encoded_content, validate=True)
+                    if len(content) > 16 * 1024 * 1024:
+                        raise ValueError("附件超过 16 MB")
+                    return self._save_content(filename, content)
+                except Exception as exc:
+                    return {"ok": False, "error": f"附件保存失败：{str(exc)[:160]}"}
+
+            def _save_content(self, filename: str, content: bytes) -> dict[str, Any]:
+                try:
                     save_name = Path(filename or "attachment").name
                     selected = webview.windows[0].create_file_dialog(
                         webview.SAVE_DIALOG,

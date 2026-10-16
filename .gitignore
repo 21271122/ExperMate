@@ -10,7 +10,9 @@ __pycache__/
 .coverage
 /AGENTS.md
 /CLAUDE.md
-/tests/
+/tests/*
+!/tests/test_react_frontend.py
+!/tests/test_sqlite_backend.py
 /design-explorations/
 /snapshot_data.py
 /run.bat
@@ -50,6 +52,8 @@ build/dist/
 
 # 便携版构建产物兜底：任何位置的 dist/ 都不入库（防 git add -A 误提几百 MB 产物）
 /dist/
+/frontend/node_modules/
+/frontend/dist/
 
 # 本地打包/构建脚本（ExperMate.spec、build-windows.ps1），不进版本库
 /packaging/

@@ -1,0 +1,19 @@
+#child-modal.analysis-pane-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 1200;
+  padding: 1rem;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.5);
+  pointer-events: auto;
+}
+#child-modal.analysis-pane-modal.active { display: flex; }
+#child-modal.analysis-pane-modal .edit-modal-box {
+  width: min(520px, calc(100% - 2rem));
+  max-height: min(75vh, calc(100% - 2rem));
+  pointer-events: auto;
+}
+body > #child-modal.analysis-pane-modal {
+  position: fixed;
+}

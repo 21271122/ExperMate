@@ -1,9 +1,10 @@
-from flask import Blueprint, request, render_template, g
+from flask import Blueprint, g, jsonify, request
+
 from lib.llm import PROVIDER_PRESETS
 
 settings_bp = Blueprint("settings", __name__)
 
-# GET 页面路由已迁移到 fragments_bp（/_fragment/settings）
+# GET 页面由 React 渲染；POST /settings 保留为 JSON 保存接口的别名。
 
 
 def _masked_key(value: str) -> str:
@@ -20,6 +21,14 @@ def settings_template_context(config):
         "masked_agent_key": _masked_key(config.get("LLM_AGENT_API_KEY", "")),
         "masked_analyze_key": _masked_key(config.get("LLM_ANALYZE_API_KEY", "")),
     }
+
+
+def settings_api_context(config):
+    keys = ("LLM_AGENT_PROVIDER", "LLM_AGENT_BASE_URL", "LLM_AGENT_MODEL", "LLM_REASONING_EFFORT",
+            "CONTEXT_COMPRESSION_TRIGGER_TOKENS", "CONTEXT_COMPRESSION_CHUNK_TOKENS",
+            "LLM_ANALYZE_PROVIDER", "LLM_ANALYZE_BASE_URL", "LLM_ANALYZE_MODEL", "ANALYSIS_TIMEOUT_SECONDS",
+            "DEEPSEEK_MODEL", "DEEPSEEK_ANALYZE_MODEL", "PORT", "HOST", "GUI")
+    return {"values": {key: config.get(key, "") for key in keys}, **settings_template_context(config)}
 
 
 def _submitted_secret(name: str) -> str:
@@ -60,9 +69,7 @@ def settings_save():
     try:
         compression_trigger, compression_chunk = _context_compression_settings()
     except ValueError as exc:
-        fragment = request.args.get("fragment") == "1" or request.headers.get("X-Fragment") == "1"
-        return render_template("settings.html", config=g.config, error=str(exc), fragment=fragment,
-                               **settings_template_context(g.config)), 400
+        return jsonify(ok=False, error=str(exc)), 400
     data = {
         "LLM_AGENT_PROVIDER": request.form.get("LLM_AGENT_PROVIDER", "deepseek"),
         "LLM_AGENT_API_KEY": _submitted_secret("LLM_AGENT_API_KEY"),
@@ -82,8 +89,5 @@ def settings_save():
     }
     # 经注入的 ConfigManager 持久化（避免反向 import app）
     g.config_manager.save(data)
-    # 判断是否为片段请求（Shell 内 fetch）
-    fragment = request.args.get("fragment") == "1" or request.headers.get("X-Fragment") == "1"
-    return render_template("settings.html", config=g.config,
-                          success="模型配置、思考强度、会话整理与分析时限已保存；后续主 Agent 对话会使用新设置。端口和 GUI 修改需重启应用生效。",
-                          fragment=fragment, **settings_template_context(g.config))
+    return jsonify(ok=True, data=settings_api_context(g.config),
+                   message="模型配置、思考强度、会话整理与分析时限已保存；后续主 Agent 对话会使用新设置。端口和 GUI 修改需重启应用生效。")

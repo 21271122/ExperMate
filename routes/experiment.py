@@ -1,5 +1,6 @@
 import yaml
-from flask import Blueprint, request, redirect, url_for, jsonify, render_template, g
+from flask import Blueprint, g, jsonify, render_template, request
+
 from lib.parser import parse_notes, strip_html
 
 experiment_bp = Blueprint("experiment", __name__)
@@ -10,8 +11,7 @@ def _notify_experiment_change(exp_id, action):
     publish_resource_change(exp_id, action, request.headers.get("X-Exdiary-Client-Id", ""))
 
 
-# 页面路由已迁移到 fragments_bp（/_fragment/...）
-# 此蓝图仅保留 API/动作路由
+# 交互页面由 React 渲染；此蓝图保留 API、动作和打印文档。
 
 
 @experiment_bp.route("/<exp_id>/yaml")

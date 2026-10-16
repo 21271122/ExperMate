@@ -168,14 +168,21 @@ def _make_auth_blueprint(ctx: E2eeCtx) -> Blueprint:
                 pass
             _epoch = ctx.svc.snapshot(account).account_epoch
             token = create_token(account, _epoch)  # 带当前 epoch；改密后旧 epoch 的 token 失效
-            return jsonify({"ok": True, "account": account, "token": token})
+            response = jsonify({"ok": True, "account": account, "token": token})
+            # React 使用同源 HttpOnly Cookie；保留 token 字段兼容旧客户端。
+            response.set_cookie("exdiary_token", token, httponly=True, secure=request.is_secure,
+                                samesite="Lax", max_age=24 * 60 * 60, path="/")
+            return response
         return jsonify({"ok": False, "error": "账号或密码错误"}), 401
 
     @bp.get("/me")
     def me():
         account, error = current_session_account()
         if not account:
-            return jsonify({"ok": False, "error": error}), 401
+            response = jsonify({"ok": False, "error": error})
+            if request.cookies.get("exdiary_token"):
+                response.delete_cookie("exdiary_token", path="/")
+            return response, 401
         return jsonify({"ok": True, "account": account})
 
     @bp.post("/logout")

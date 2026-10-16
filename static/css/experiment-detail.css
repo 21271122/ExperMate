@@ -1,0 +1,73 @@
+.experiment-detail-header {
+  display:flex; justify-content:space-between; align-items:flex-start;
+  flex-wrap:wrap; gap:0.5rem; margin-bottom:1rem;
+}
+.experiment-detail-meta {
+  font-weight:700; font-size:0.75rem; opacity:0.5; display:block;
+  margin-top:0.1em; letter-spacing:1px;
+}
+.experiment-detail-actions { display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; }
+.experiment-detail-action { font-size:0.75rem; padding:0.25rem 0.6rem; }
+#btn-save:disabled {
+  background:#bdbdbd;
+  border-color:#888;
+  color:#666;
+  cursor:not-allowed;
+  box-shadow:none;
+}
+.archive-badge {
+  display:inline-block; margin-left:0.45rem; padding:0.08rem 0.36rem;
+  border:2px solid var(--black); background:var(--surface-2); color:var(--text-2);
+  font-size:0.66rem; font-weight:900; letter-spacing:0.08em;
+}
+.archive-action { background:var(--surface-2); color:var(--black); }
+.archive-action:hover { background:var(--white); }
+.edit-locked { opacity:0.42; cursor:not-allowed !important; }
+.edit-locked:not(button) { pointer-events:none; user-select:none; }
+
+@media (max-width:600px) and (orientation:portrait) {
+  .experiment-detail-header {
+    display:grid; grid-template-columns:minmax(0, 1fr); gap:0.58rem;
+    margin-bottom:0.85rem; padding-bottom:0.8rem;
+    border-bottom:3px solid var(--black);
+  }
+  .experiment-detail-header h1 { line-height:1.22; }
+  .experiment-detail-meta {
+    display:flex; flex-wrap:wrap; align-items:center; gap:0.2rem 0.45rem;
+    margin-top:0.36rem;
+  }
+  #field-tags-container {
+    display:flex; flex-wrap:wrap; gap:0.2rem; margin:0;
+    opacity:1;
+  }
+  #field-tags-container .tag-pill { margin:0; }
+  .experiment-detail-actions {
+    display:flex; flex-wrap:wrap; justify-content:flex-start;
+    gap:0.32rem; max-width:100%; min-width:0;
+  }
+  .experiment-detail-actions > * { white-space:nowrap; }
+  .experiment-detail-action { font-size:0.68rem; padding:0.23rem 0.48rem; }
+}
+
+@media (max-width:350px) and (orientation:portrait) {
+  .experiment-detail-header h1 { font-size:1.72rem; }
+}
+
+#child-modal.experiment-pane-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 1200;
+  padding: 1rem;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.5);
+  pointer-events: auto;
+}
+#child-modal.experiment-pane-modal.active { display: flex; }
+#child-modal.experiment-pane-modal .edit-modal-box {
+  max-height: min(75vh, calc(100% - 2rem));
+  pointer-events: auto;
+}
+body > #child-modal.experiment-pane-modal {
+  position: fixed;
+}

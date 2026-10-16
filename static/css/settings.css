@@ -1,0 +1,8 @@
+/* 设置页遵循“标题/操作用微软雅黑，说明/内容用仿宋”的全站中文层级。 */
+.settings-content { font-family:var(--font-reading, "FangSong", "FangSong_GB2312", "STFangsong", serif); }
+.settings-content h1, .settings-content h2, .settings-content h3,
+.settings-content label > strong, .settings-content button,
+.settings-content .settings-kicker { font-family:var(--font-ui, "Microsoft YaHei", "PingFang SC", sans-serif); }
+.settings-content input, .settings-content select, .settings-content small,
+.settings-content .flash { font-family:var(--font-reading, "FangSong", "FangSong_GB2312", "STFangsong", serif); }
+.settings-content input.settings-code-input { font-family:var(--font-code, "Cascadia Mono", Consolas, monospace); }

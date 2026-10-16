@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, g
 
 templates_bp = Blueprint("templates", __name__)
 
-# GET /templates 页面路由已迁移到 fragments_bp（/_fragment/templates）
+# GET /templates 页面由 React 渲染。
 
 
 @templates_bp.route("/api/templates/<template_id>")
