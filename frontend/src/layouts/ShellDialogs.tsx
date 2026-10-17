@@ -1,5 +1,5 @@
 // 原始 ai-shell/index.html 的 DOM 结构，使用现有 CSS；不得在框架迁移中改版。
-import { invoke } from "../legacy/invoke";
+import { services } from '../runtime/services';
 import { useAccount } from "../features/account/AccountContext";
 import { useEffect, useLayoutEffect, useState } from 'react';
 
@@ -9,8 +9,8 @@ export function ShellDialogs() {
   const [hideSupport, setHideSupport] = useState(() => localStorage.getItem('expermate_support_modal_hidden') === '1');
   useEffect(() => setConfigured(true), []);
   useLayoutEffect(() => {
-    Object.assign(window, { showSupportModal: () => { if (!hideSupport) { setSupport(true); requestAnimationFrame(() => document.getElementById('support-modal-close')?.focus()); } }, closeSupportModal: () => setSupport(false) });
-    return () => { Reflect.deleteProperty(window, 'showSupportModal'); Reflect.deleteProperty(window, 'closeSupportModal'); };
+    Object.assign(services, { showSupportModal: () => { if (!hideSupport) { setSupport(true); requestAnimationFrame(() => document.getElementById('support-modal-close')?.focus()); } }, closeSupportModal: () => setSupport(false) });
+    return () => { Reflect.deleteProperty(services, 'showSupportModal'); Reflect.deleteProperty(services, 'closeSupportModal'); };
   }, [hideSupport]);
   const field = (id: string) => ({ value: account.fields[id] || '',
     onChange: (event: React.ChangeEvent<HTMLInputElement>) => account.setField(id, event.target.value) });
@@ -74,7 +74,7 @@ export function ShellDialogs() {
           <button type={"button"} className={"outline"} style={{"display": "block", "width": "100%", "marginBottom": "8px"}} onClick={() => { account.close();account.open("email"); }}>
             {"修改恢复邮箱"}
           </button>
-          <button type={"button"} className={"outline"} style={{"display": "block", "width": "100%", "marginBottom": "8px"}} onClick={() => { account.close();invoke("PanelManager.navigate", '/settings'); }}>
+          <button type={"button"} className={"outline"} style={{"display": "block", "width": "100%", "marginBottom": "8px"}} onClick={() => { account.close();services.PanelManager?.navigate('/settings'); }}>
             {"设置"}
           </button>
           <button type={"button"} className={"outline danger"} style={{"display": "block", "width": "100%"}} onClick={() => { account.logout(); }} disabled={account.pending}>

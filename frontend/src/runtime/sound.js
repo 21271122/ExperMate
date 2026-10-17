@@ -1,3 +1,4 @@
+import { services } from './services';
 /* ExperMate 声音反馈：本地操作音效与古典背景音乐，不上传音频偏好。 */
 export function initializeSound(scope) {
   "use strict";
@@ -79,8 +80,6 @@ export function initializeSound(scope) {
     if (!el) return;
     el.textContent = settings.bgm && bgmAudio && !bgmAudio.paused && track ? "♪ " + track.title : "";
     el.style.display = el.textContent ? "inline-block" : "none";
-    var picker = document.getElementById("sound-bgm-track");
-    if (!window.ExperMateReactSettings && picker && track && track.id) picker.value = track.id;
   }
   function savePlaybackState(playing) {
     var track = currentTrack();
@@ -94,7 +93,7 @@ export function initializeSound(scope) {
       bgmTracks = data.tracks;
       bgmQueue = [];
       if (selectedBgmIndex() < 0) { settings.bgmTrack = bgmTracks[0].id || "0"; save(); }
-      bindSettings(document);
+      notify();
     }).catch(function () {});
   }
   function cancelBgmFade() {
@@ -202,38 +201,6 @@ export function initializeSound(scope) {
       if (bgmAudio.paused) startBgm();
     } else if (bgmAudio && !bgmAudio.paused) fadeBgm(bgmAudio.volume, bgmLevel(), 180);
   }
-  function bindSettings(root) {
-    if (window.ExperMateReactSettings) { notify(); return; }
-    root = root || document;
-    var sfx = root.querySelector("#sound-sfx"), sfxVolume = root.querySelector("#sound-sfx-volume");
-    var bgm = root.querySelector("#sound-bgm"), bgmVolume = root.querySelector("#sound-bgm-volume");
-    var bgmTrack = root.querySelector("#sound-bgm-track");
-    if (sfx) sfx.checked = settings.sfx;
-    if (sfxVolume) sfxVolume.value = settings.sfxVolume;
-    if (bgm) bgm.checked = settings.bgm;
-    if (bgmVolume) bgmVolume.value = settings.bgmVolume;
-    if (bgmTrack) {
-      bgmTrack.innerHTML = bgmTracks.map(function (track, index) {
-        return '<option value="' + (track.id || index) + '">' + track.title + '</option>';
-      }).join("");
-      bgmTrack.value = String(settings.bgmTrack || (bgmTracks[0] && (bgmTracks[0].id || "0")) || "");
-    }
-  }
-
-  scope.listen(document, "change", function (event) {
-    if (window.ExperMateReactSettings) return;
-    var control = event.target;
-    if (control.id === "sound-sfx") { update({ sfx: control.checked }); if (control.checked) play("general"); }
-    if (control.id === "sound-bgm") { update({ bgm: control.checked }); if (control.checked) startBgm(); }
-    if (control.id === "sound-bgm-track") update({ bgmTrack: control.value });
-  });
-  scope.listen(document, "input", function (event) {
-    if (window.ExperMateReactSettings) return;
-    var control = event.target;
-    if (control.id === "sound-sfx-volume") update({ sfxVolume: Number(control.value) });
-    if (control.id === "sound-bgm-volume") update({ bgmVolume: Number(control.value) });
-  });
-
   function isDeletionControl(control) {
     var label = /^(BUTTON|A|SUMMARY)$/.test(control.tagName) ? (control.textContent || "") : "";
     var marker = ((control.id || "") + " " + (control.className || "") + " " +
@@ -275,8 +242,10 @@ export function initializeSound(scope) {
   refreshLibrary();
 
   scope.cleanup(function () { if (bgmAudio) bgmAudio.pause(); Object.keys(sfxAudios).forEach(function (key) { sfxAudios[key].pause(); }); });
-  window.ExdiarySound = { update: function (next) { update(next); if (next.bgm) startBgm(); }, getTracks: function () { return bgmTracks.map(function (track,index) { return {id:track.id || String(index), title:track.title}; }); }, play: play, bindSettings: bindSettings, nextBgm: nextBgm,
+  const api = { update: function (next) { update(next); if (next.bgm) startBgm(); }, getTracks: function () { return bgmTracks.map(function (track,index) { return {id:track.id || String(index), title:track.title}; }); }, play: play, nextBgm: nextBgm,
     applyMusicControl: applyMusicControl, refreshLibrary: refreshLibrary,
     getSettings: function () { return Object.assign({}, settings); } };
+  services.ExdiarySound = api;
+  return api;
 }
 

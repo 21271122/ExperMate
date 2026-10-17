@@ -1,3 +1,4 @@
+import { services } from './services';
 /* Exdiary motion manager. Keeps page changes and controls feeling related. */
 export function initializeMotion(scope) {
   "use strict";
@@ -25,7 +26,7 @@ export function initializeMotion(scope) {
   ];
 
   function routeColor(path) {
-    path = path || (window.PanelManager ? window.PanelManager.currentPath() : window.location.pathname) || "/";
+    path = path || (services.PanelManager ? services.PanelManager.currentPath() : window.location.pathname) || "/";
     for (var i = 0; i < ROUTE_COLORS.length; i++) {
       if (ROUTE_COLORS[i].re.test(path)) return ROUTE_COLORS[i].color;
     }
@@ -147,10 +148,12 @@ export function initializeMotion(scope) {
   if (document.readyState === "loading") scope.listen(document, "DOMContentLoaded", bindPressFeedback);
   else bindPressFeedback();
 
-  window.ExMotion = {
+  const api = {
     begin: begin,
     reveal: reveal,
     enter: enter,
     routeColor: routeColor,
   };
+  services.ExMotion = api;
+  return api;
 }

@@ -2,16 +2,17 @@
 
 - 独立的账号库（`data/_e2ee_accounts.db`），不依赖现有 STORAGE_BACKEND / relay。
 - 提供 `/api/e2ee/*` 认证蓝本：register / login / me。
-- 登录成功复用现有 JWT（lib.auth.create_token）签发会话，base.html 顶栏弹悬浮窗使用。
+- 登录成功通过 HttpOnly Cookie 签发服务端会话。
 """
 
 from __future__ import annotations
 
 import os
 import sqlite3
+import threading
 from pathlib import Path
 
-from flask import Blueprint, jsonify, make_response, request
+from flask import Blueprint, current_app, g, jsonify, make_response, request
 
 from lib.e2ee.grants import SensitiveGrantStore
 from lib.e2ee.journal import SecurityJournal
@@ -20,7 +21,6 @@ from lib.e2ee.kms import MemoryRecoveryKMS
 from lib.e2ee.recovery import RecordingMailSender, RecoveryService
 from lib.e2ee.service import AccountSecurityService
 from lib.e2ee.policy import canonicalize_email, validate_password
-from lib.e2ee import credstore
 from lib.runtime_paths import app_root, resolve_data_dir
 
 # 打包后 __file__ 位于 _internal，必须用统一的 app_root() 推导，避免
@@ -30,58 +30,34 @@ _RUNTIME_DATA_DIR = resolve_data_dir(_PROJECT_ROOT)
 _ACCOUNT_DB = Path(os.environ.get("EXDIARY_ACCOUNT_DB", str(_RUNTIME_DATA_DIR / "_e2ee_accounts.db")))
 _KMS_KEY_FILE = Path(os.environ.get("EXDIARY_KMS_KEY_FILE", str(_RUNTIME_DATA_DIR / "_e2ee_kms.key")))
 
-# 进程内存 DEK 缓存（key=账号）。登录/注册时经 open_dek 解出后缓存；
-# 重启即空需重新登录派生。绝不落明文盘（对应设计 §16 的边界取舍）。
-_DEK_CACHE: dict[str, bytes] = {}
-
-
-def get_cached_dek(account: str) -> bytes | None:
-    return _DEK_CACHE.get(account)
-
-
-def set_cached_dek(account: str, dek: bytes) -> None:
-    _DEK_CACHE[account] = dek
-
-
-def drop_cached_dek(account: str) -> None:
-    _DEK_CACHE.pop(account, None)
-
-
-def _load_kms_key() -> bytes:
-    """recovery key 必须跨重启持久（真实 KMS 是持久化的）；这里持久化到一个私有文件。
-
-    生产应替换为真实 KMS（key material 不出 KMS），本文件仅演示/自托管等效。
-    """
-    if _KMS_KEY_FILE.exists():
-        return _KMS_KEY_FILE.read_bytes()
-    _KMS_KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    key = os.urandom(32)
-    _KMS_KEY_FILE.write_bytes(key)
-    return key
-
-
-def _open_account_db() -> sqlite3.Connection:
-    _ACCOUNT_DB.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(_ACCOUNT_DB), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
-
-
 class E2eeCtx:
     """进程级 e2ee 装配（账号库 + 各安全模块 + 独立故障域 journal）。"""
 
-    def __init__(self) -> None:
-        self.conn = _open_account_db()
+    def __init__(self, account_db=None, kms_key_file=None, mail=None) -> None:
+        self.lock = threading.RLock()
+        account_db = Path(account_db or _ACCOUNT_DB)
+        account_db.parent.mkdir(parents=True, exist_ok=True)
+        self.conn = sqlite3.connect(account_db, check_same_thread=False)
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA journal_mode=WAL")
         self.ks = KeyringStore(self.conn)
         self.grants = SensitiveGrantStore(self.conn)
-        self.kms = MemoryRecoveryKMS(key=_load_kms_key())
+        key_file = Path(kms_key_file or _KMS_KEY_FILE)
+        key_file.parent.mkdir(parents=True, exist_ok=True)
+        if not key_file.exists():
+            with key_file.open("xb") as output:
+                output.write(os.urandom(32))
+        self.kms = MemoryRecoveryKMS(key=key_file.read_bytes())
         self.svc = AccountSecurityService(self.conn, self.ks, self.grants, self.kms)
         # 独立故障域 journal（生产应独立存储/更严 RPO；此处内存）
         self.jconn = sqlite3.connect(":memory:", check_same_thread=False)
         self.journal = SecurityJournal(self.jconn)
-        self.mail = RecordingMailSender()
+        self.mail = mail or RecordingMailSender()
         self.rec = RecoveryService(self.conn, self.grants, self.mail)
+
+    def close(self):
+        self.conn.close()
+        self.jconn.close()
 
     def register(self, account: str, email: str, password: str) -> None:
         self.svc.register(account, password)
@@ -112,14 +88,23 @@ def _make_auth_blueprint(ctx: E2eeCtx) -> Blueprint:
             try:
                 snapshot = ctx.svc.snapshot(account)
             except KeyError:
-                # 与 app.py 的旧账号兼容策略保持一致：历史账号没有 e2ee 条目时，
-                # 仍可使用已签发的有效 JWT。
-                return account, ""
+                return None, "登录已失效，请重新登录"
             if int(payload.get("epoch")) != int(snapshot.account_epoch):
                 return None, "登录已失效，请重新登录"
         except Exception:
             return None, "登录已失效，请重新登录"
         return account, ""
+
+    @bp.before_request
+    def acquire_account_lock():
+        if getattr(ctx, "lock", None) is not None:
+            ctx.lock.acquire()
+            g.account_lock_held = True
+
+    @bp.teardown_request
+    def release_account_lock(error):
+        if g.pop("account_lock_held", False):
+            ctx.lock.release()
 
     @bp.post("/register")
     def register():
@@ -127,6 +112,9 @@ def _make_auth_blueprint(ctx: E2eeCtx) -> Blueprint:
         account = (data.get("account") or "").strip()
         email = (data.get("email") or "").strip()
         password = data.get("password") or ""
+        config = current_app.config.get("EXDIARY_CONFIG", {})
+        if not config.get("ALLOW_REGISTRATION", True) or account in config.get("ADMIN_ACCOUNTS", []):
+            return jsonify(ok=False, error="该账号请由服务端管理员创建"), 403
         if len(account) < 2 or "@" not in email:
             return jsonify({"ok": False, "error": "账号至少 2 字符、邮箱需含 @"}), 400
         _ok, _reason = validate_password(password)
@@ -138,21 +126,7 @@ def _make_auth_blueprint(ctx: E2eeCtx) -> Blueprint:
             ctx.register(account, email, password)
         except Exception:
             return jsonify({"ok": False, "error": "注册失败"}), 500
-        try:  # 注册即解出该账号 DEK（进程内存缓存 + 持久化到系统凭据库）
-            _dek = ctx.svc.open_dek(account, password)
-            set_cached_dek(account, _dek)
-            credstore.set_dek(account, _dek)  # §16：重启后凭合法 JWT 免重登
-        except Exception:
-            pass
-        _result = {"ok": True, "account": account,
-                   "notice": "注册成功 — 已设置恢复邮箱（忘记密码用邮箱找回）"}
-        try:
-            from lib.offline import has_offline_data
-            if has_offline_data():
-                _result["has_offline_data"] = True
-        except Exception:
-            pass
-        return jsonify(_result)
+        return jsonify(ok=True, account=account, notice="注册成功，请登录")
 
     @bp.post("/login")
     def login():
@@ -160,16 +134,13 @@ def _make_auth_blueprint(ctx: E2eeCtx) -> Blueprint:
         account = (data.get("account") or "").strip()
         password = data.get("password") or ""
         if ctx.svc.login(account, password):
-            try:  # 登录成功 → 解该账号 DEK（进程内存缓存 + 持久化到系统凭据库）
-                _dek = ctx.svc.open_dek(account, password)
-                set_cached_dek(account, _dek)
-                credstore.set_dek(account, _dek)  # §16：重启后凭合法 JWT 免重登
-            except Exception:
-                pass
             _epoch = ctx.svc.snapshot(account).account_epoch
             token = create_token(account, _epoch)  # 带当前 epoch；改密后旧 epoch 的 token 失效
-            response = jsonify({"ok": True, "account": account, "token": token})
-            # React 使用同源 HttpOnly Cookie；保留 token 字段兼容旧客户端。
+            payload = {"ok": True, "account": account}
+            if not current_app.config.get("SERVER_MODE"):
+                payload["token"] = token
+            response = jsonify(payload)
+            # 服务端模式只签发 HttpOnly Cookie，不将凭证复制到浏览器存储。
             response.set_cookie("exdiary_token", token, httponly=True, secure=request.is_secure,
                                 samesite="Lax", max_age=24 * 60 * 60, path="/")
             return response
@@ -213,15 +184,17 @@ def _make_auth_blueprint(ctx: E2eeCtx) -> Blueprint:
 
     @bp.post("/forgot")
     def forgot():
-        """忘密：发高熵 reset token 到恢复邮箱（演示模式回显 token；真实环境只发信）。"""
+        """忘密：高熵 reset token 仅发送到恢复邮箱。"""
         data = request.get_json(silent=True) or {}
         account = (data.get("account") or "").strip()
         email = (data.get("email") or "").strip()
-        token = ctx.rec.request_password_reset(account, email)
-        if token is None:
-            return jsonify({"ok": False, "error": "账号/邮箱不匹配"}), 404
-        return jsonify({"ok": True, "token": token,
-                        "notice": "（演示）已向该邮箱发送一次性验证码，见下方"})
+        if not current_app.config.get("MAIL_CONFIGURED"):
+            return jsonify(ok=False, error="服务端尚未配置邮件服务，请联系管理员"), 503
+        try:
+            ctx.rec.request_password_reset(account, email)
+        except Exception:
+            return jsonify(ok=False, error="邮件发送失败，请稍后重试"), 503
+        return jsonify(ok=True, notice="如账号与邮箱匹配，验证码已发送至邮箱")
 
     @bp.post("/reset")
     def reset():
@@ -258,10 +231,11 @@ def _make_auth_blueprint(ctx: E2eeCtx) -> Blueprint:
         # §11 step-up：改恢复邮箱必须先 current-password reauth
         if not ctx.svc.login(account, password):
             return jsonify({"ok": False, "error": "当前密码错误"}), 401
+        if not current_app.config.get("MAIL_CONFIGURED"):
+            return jsonify(ok=False, error="服务端尚未配置邮件服务，请联系管理员"), 503
         try:
-            token = ctx.rec.begin_email_change(account, new_email)
-            return jsonify({"ok": True, "token": token,
-                            "notice": "已向新邮箱发送验证码（演示回显，见下方）；确认前旧邮箱仍有效"})
+            ctx.rec.begin_email_change(account, new_email)
+            return jsonify(ok=True, notice="验证码已发送至新邮箱；确认前旧邮箱仍有效")
         except Exception:
             return jsonify({"ok": False, "error": "发起失败"}), 400
 
@@ -290,7 +264,13 @@ def _make_auth_blueprint(ctx: E2eeCtx) -> Blueprint:
 def init_e2ee(app) -> bool:
     """挂到现有 Flask app；返回是否成功启用。"""
     try:
-        ctx = E2eeCtx()
+        from lib.server_mail import SMTPMailSender
+        config = app.config.get("EXDIARY_CONFIG", {})
+        mail = app.config.get("MAIL_SENDER")
+        app.config["MAIL_CONFIGURED"] = bool(mail or config.get("SMTP_HOST"))
+        if mail is None and config.get("SMTP_HOST"):
+            mail = SMTPMailSender(config)
+        ctx = E2eeCtx(app.config.get("ACCOUNT_DB_PATH"), app.config.get("KMS_KEY_PATH"), mail)
         app.extensions["e2ee"] = ctx
         app.register_blueprint(_make_auth_blueprint(ctx))
         app.config["E2EE_ENABLED"] = True

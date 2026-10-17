@@ -1,3 +1,4 @@
+import { services } from '../../runtime/services';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -5,7 +6,7 @@ import { AttachmentPreview, downloadAttachment } from './AttachmentPreview';
 import { PrintPreview } from './PrintPreview';
 
 const reply = (body: unknown) => new Response(JSON.stringify(body));
-afterEach(() => { vi.unstubAllGlobals(); Reflect.deleteProperty(window,'pywebview'); });
+afterEach(() => { vi.unstubAllGlobals(); Reflect.deleteProperty(services,'pywebview'); });
 test('Excel 预览保留样式、合并单元格、分页和工作表切换；所选单元格复制为表格', async () => {
   const fetchMock = vi.fn(async (url: string) => reply({ ok: true, kind: 'xlsx', sheet: url.includes('sheet=B') ? 'B' : 'A', sheets: [{ name:'A',rows:300,columns:2 },{ name:'B',rows:1,columns:1 }],
     columns: ['A','B'], rows: [['one','two'],['three','four']], start_row:url.includes('start_row=201')?201:1, has_more:!url.includes('start_row=201'), cell_styles:{ A1:{font:{bold:true},fill:'#ffff00'} }, merged_cells:[] }));
@@ -26,9 +27,12 @@ test('打印预览使用原文档输出，加载后才启用打印，关闭时�
   expect(screen.getByRole('button',{name:'打印'})).toBeEnabled();await user.click(screen.getByRole('button',{name:'关闭打印预览'}));expect(close).toHaveBeenCalledOnce();
   view.unmount();expect((fetchMock.mock.calls[0] as unknown as [string,RequestInit])[1].signal?.aborted).toBe(true);
 });
-test('桌面下载先通过 Cookie 获取内容，再交给本机保存窗口，不向 JavaScript 暴露会话令牌',async()=>{
-  const save=vi.fn(async()=>({ok:true}));Object.assign(window,{pywebview:{api:{save_attachment_data:save}}});
-  const fetchMock=vi.fn(async()=>new Response(new Uint8Array([0,1,2,255])));vi.stubGlobal('fetch',fetchMock);
+test('附件通过浏览器下载，不依赖桌面桥接', async()=>{
+  const save=vi.fn();Object.assign(window,{pywebview:{api:{save_attachment_data:save}}});
+  const fetchMock=vi.fn();vi.stubGlobal('fetch',fetchMock);
+  const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(function(this: HTMLAnchorElement){
+    expect(this.href).toContain('/api/attachments/a?download=1');expect(this.download).toBe('test.bin');
+  });
   await downloadAttachment({sha256:'a',url:'/api/attachments/a',name:'test.bin'});
-  expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/attachments/a?download=1'));expect(save).toHaveBeenCalledWith('test.bin','AAEC/w==');
+  expect(click).toHaveBeenCalledOnce();expect(save).not.toHaveBeenCalled();expect(fetchMock).not.toHaveBeenCalled();click.mockRestore();
 });

@@ -1,3 +1,4 @@
+import { services } from '../../runtime/services';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -23,11 +24,21 @@ beforeEach(() => {
     if (url === '/api/categories' && options?.method === 'POST') { data.collections.new = []; return reply({ ok: true }); }
     return reply({ ok: true });
   });
-  vi.stubGlobal('fetch', fetchMock); Object.assign(window, { PanelManager: { navigate } });
+  vi.stubGlobal('fetch', fetchMock); Object.assign(services, { PanelManager: { navigate } });
 });
 afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear(); navigate.mockClear(); });
 const row = (id: string) => document.querySelector<HTMLElement>(`[data-exp-id="${id}"]`)!;
 async function mount() { const user = userEvent.setup(); render(<ExperimentList path="/experiments" />); await screen.findByText('XRD first'); return user; }
+
+test('列表初次渲染即包含原样式，工具面板默认隐藏且能按需展开', async () => {
+  const user = await mount();
+  expect(document.querySelector('link[href="/static/css/experiments.css"]')).toBeNull();
+  expect(document.querySelector('style')?.textContent).toContain('.exp-list-page');
+  const panel = document.getElementById('panel-categories')!;
+  expect(getComputedStyle(panel).display).toBe('none');
+  await user.click(screen.getByRole('button', { name: '分类' }));
+  expect(getComputedStyle(panel).display).not.toBe('none');
+});
 
 test('摘要加载后使用原行结构、独立置顶和未标注日期折叠，保留搜索/归档语义', async () => {
   const user = await mount();
@@ -83,7 +94,7 @@ test('恢复过滤条件时不恢复旧搜索', async () => {
 });
 
 test('未登录时显示失败提示并打开原账号窗', async () => {
-  const showAuthModal = vi.fn(); Object.assign(window, { showAuthModal });
+  const showAuthModal = vi.fn(); Object.assign(services, { showAuthModal });
   fetchMock.mockResolvedValueOnce(reply({ error: { message: '请先登录' } }, 401));
   render(<ExperimentList path="/experiments" />);
   expect(await screen.findByRole('alert')).toHaveTextContent('请先登录'); expect(showAuthModal).toHaveBeenCalledOnce();
@@ -91,7 +102,7 @@ test('未登录时显示失败提示并打开原账号窗', async () => {
 
 test('手机工具面板通过 Portal 保持事件可用，关闭和卸载不留下浮层', async () => {
   const user = userEvent.setup(); const view = render(<ExperimentList path="/experiments" />); await screen.findByText('XRD first');
-  const list = (window as unknown as { ExperMateList: { openPanelPopup: (name: string) => void } }).ExperMateList;
+  const list = (services as unknown as { ExperMateList: { openPanelPopup: (name: string) => void } }).ExperMateList;
   act(() => list.openPanelPopup('filters'));
   const popup = document.getElementById('shell-panel-popup')!;
   expect(popup.parentElement).toBe(document.body); expect(document.querySelectorAll('#panel-filters')).toHaveLength(1);

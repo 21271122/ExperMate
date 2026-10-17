@@ -2,16 +2,16 @@
 
 > 你的实验记录与分析伙伴。
 
-ExperMate 是一款本地优先的实验记录应用。你可以通过对话记录实验、复刻既有实验、选择多条实验生成分析报告，并管理附件、分类和聊天历史。
+ExperMate 是一款由服务端统一管理数据和模型调用的实验记录应用。你可以通过对话记录实验、复刻既有实验、选择多条实验生成分析报告，并管理附件、分类和聊天历史。
 
-它不是云端笔记网站：数据默认保存在当前设备的 SQLite 数据库中。登录后按账号加载数据；多设备同步是可选功能，中继只保存加密后的同步数据，不承担模型调用。
+浏览器负责交互，服务端保存配置、账号、实验、报告、附件和会话。浏览器与服务端通过同源 API 通信，业务数据按账号隔离。
 
 ## 适合谁
 
 - 想把零散实验过程整理为可检索、可回溯记录的科研人员；
 - 希望让 AI 协助补全实验字段、复刻方案和梳理结论的人；
 - 需要把多次实验放在一起核对、比较并生成分析报告的人；
-- 希望数据主要留在自己电脑，而不是默认上传到陌生云端的人。
+- 希望在自己管理的服务器上保存实验数据的人。
 
 ## 主要能力
 
@@ -22,7 +22,7 @@ ExperMate 是一款本地优先的实验记录应用。你可以通过对话记�
 - 按时间翻阅和检索聊天记录
 - 分类、置顶、归档与更新日志
 - 记录/分析子线程、主对话上下文整理
-- 可选的账号登录与端到端加密多设备同步
+- 账号登录与多浏览器共享服务端数据
 
 ## 快速开始（Windows）
 
@@ -35,20 +35,16 @@ cd ExperMate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 
-Copy-Item .env.example .env
-# 编辑 .env，填入你的模型 API Key
-python app.py
+New-Item -ItemType Directory -Force data
+Copy-Item .env.example data/.env
+# 编辑 data/.env，填入服务端模型 API Key
+python -m flask --app app:create_app create-user --account admin --email admin@example.com --admin
+# 按提示设置密码
+python app.py --host 127.0.0.1 --port 5000
 ```
 
-依次执行以上命令即可启动。
-
-默认会启动桌面窗口，也可通过网页访问，不需要桌面端，只需网页服务时使用：
-
-```bash
-python app.py --headless
-```
-
-默认网页地址：<http://127.0.0.1:5000>
+通过浏览器访问 <http://127.0.0.1:5000> 并登录。当前启动方式不再创建桌面窗口。
+首次使用还需完成下方 React 构建。服务器部署与旧数据导入见[服务端运行迁移说明](docs/server-runtime-migration.md)。旧离线库不会自动导入，需手动指定归属账号。
 
 ### React 前端
 
@@ -58,10 +54,11 @@ python app.py --headless
 
 ## 数据与模型服务
 
-- 实验、聊天、附件和设置默认保存在本机；
-- 只有在你发起 AI 请求时，完成该请求所需的对话、实验内容或附件才会发送给你自行配置的模型服务商；
-- 可选同步中继只处理加密同步数据，不能替代本机备份；
-- 前端依赖已经随仓库提供，启动页面不再请求第三方 CDN。
+- 实验、聊天、附件、模型密钥和运行配置均保存在部署的服务端；
+- 模型请求由服务端发出，普通账号不能修改全局模型密钥；
+- 登录过期后要求重新登录，不回退到离线库；
+- 浏览器仅保留主题、列表视图和音量等显示偏好；
+- 服务端能读取业务数据；当前模式不提供对服务端的端到端加密。
 
 详细边界见[数据与隐私说明](docs/privacy.md)。
 
@@ -74,7 +71,7 @@ ExperMate 的项目代码采用 [Elastic License 2.0（ELv2）](LICENSE)。你�
 - [配置模型与运行参数](docs/getting-started/configuration.md)
 - [本地运行与常见问题](docs/getting-started/local-run.md)
 - [数据、备份与恢复](docs/operations/data-and-backup.md)
-- [服务器与同步中继部署](docs/operations/deployment.md)
+- [服务器部署](docs/operations/deployment.md)
 - [数据与隐私说明](docs/privacy.md)
 - [更新日志](CHANGELOG.md)
 
@@ -82,7 +79,7 @@ ExperMate 的项目代码采用 [Elastic License 2.0（ELv2）](LICENSE)。你�
 
 不要提交、公开上传或通过不可信渠道发送以下内容：`.env`、`config.yaml`、`data/` 目录、账号恢复材料和中继运行数据。
 
-同步用于让设备保持一致，不替代备份。升级、迁移或重装前，请按[数据、备份与恢复](docs/operations/data-and-backup.md)完成完整备份。
+服务端集中存储不能替代备份。升级、迁移或重装前，请按[数据、备份与恢复](docs/operations/data-and-backup.md)完成完整备份。
 
 ## 反馈与支持
 

@@ -13,6 +13,8 @@ __pycache__/
 /tests/*
 !/tests/test_react_frontend.py
 !/tests/test_sqlite_backend.py
+!/tests/test_server_runtime.py
+!/tests/test_workspace_import.py
 /design-explorations/
 /snapshot_data.py
 /run.bat

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { requestJson } from '../experiments/api';
+import { requestJson } from '../../shared/api';
 import { escapeHtml, type Attachment } from '../experiments/detail-model';
 
 export function attachmentKind(item: Attachment) {
@@ -11,14 +11,6 @@ export function attachmentKind(item: Attachment) {
 }
 export async function downloadAttachment(item: Attachment) {
   const url = new URL(item.url || '/api/attachments/' + encodeURIComponent(item.sha256), location.origin); url.searchParams.set('download', '1');
-  const desktop = (window as unknown as { pywebview?: { api?: { save_attachment_data?: (name: string, data: string) => Promise<{ ok: boolean; cancelled?: boolean; error?: string }> } } }).pywebview?.api;
-  if (desktop?.save_attachment_data) {
-    const response = await fetch(url.href); if (!response.ok) throw new Error('附件下载失败');
-    const data = new Uint8Array(await response.arrayBuffer()); let binary = '';
-    for (let offset = 0; offset < data.length; offset += 8192) binary += String.fromCharCode(...data.subarray(offset, offset + 8192));
-    const result = await desktop.save_attachment_data(item.name || 'attachment', btoa(binary));
-    if (!result.ok && !result.cancelled) throw new Error(result.error || '附件保存失败'); return result;
-  }
   const link = document.createElement('a'); link.href = url.href; link.download = item.name || 'attachment'; document.body.appendChild(link); link.click(); link.remove();
   return { ok: true };
 }

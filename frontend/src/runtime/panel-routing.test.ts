@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { createPanelManager } from '../runtime/panel';
+import { createPanelManager } from './panel';
 
 test.each([
   ['', '/', '/'], ['', '/experiments/A-01', '/experiments/A-01'],

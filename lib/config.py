@@ -5,16 +5,28 @@
 现在由 ConfigManager 持有，app 与路由经注入访问（g.config_manager）。
 """
 
+import os
+import tempfile
+import threading
 import warnings
 from pathlib import Path
 from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field
+
 from lib.experiment_ids import new_device_code, normalize_device_code
 
 
 class Settings(BaseModel):
+    TRUSTED_PROXY_HOPS: int = Field(default=0, ge=0)
+    ADMIN_ACCOUNTS: list[str] = Field(default_factory=list)
+    ALLOW_REGISTRATION: bool = True
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
     # 新模型配置。Agent/结构化提取与分析可分别选厂商；分析字段留空时继承 Agent。
     LLM_AGENT_PROVIDER: str = "deepseek"
     LLM_AGENT_API_KEY: str = ""
@@ -35,14 +47,10 @@ class Settings(BaseModel):
     DEEPSEEK_ANALYZE_MODEL: str = "deepseek-v4-pro"
     ENCRYPTION_KEY: str = ""       # 数据库加密密钥（空=不加密），生产环境通过环境变量设置
     JWT_SECRET: str = ""             # JWT 签名密钥（空=自动生成），生产环境通过环境变量设置
-    RELAY_URL: str = ""             # 中继服务器地址（空=纯本地模式）
-    RELAY_API_KEY: str = ""         # 中继 API Key
     PORT: int = Field(default=5000, ge=1024, le=65535)
-    HOST: str = "0.0.0.0"
-    GUI: str = "true"
+    HOST: str = "127.0.0.1"
     DATA_DIR: str = ""
     DEVICE_CODE: str = ""
-    OFFLINE_DEVICE_CODE: str = ""
 
     def validate_model_names(self) -> None:
         known = {"deepseek", "qwen", "zhipu", "kimi", "minimax", "baidu", "volcengine", "custom"}
@@ -63,7 +71,7 @@ def _parse_dotenv(path: Path) -> dict[str, str]:
     cfg: dict[str, str] = {}
     if not path.exists():
         return cfg
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
@@ -86,13 +94,15 @@ class ConfigManager:
 
     def __init__(self, settings_path: Path) -> None:
         self.settings_path = settings_path
+        self.overrides: dict[str, Any] = {}
+        self._lock = threading.RLock()
         self.settings: Settings | None = None
         self.view: dict[str, Any] = {}
 
     def load(self) -> dict[str, Any]:
         """加载配置。config.yaml 优先；否则回退 .env（并落盘为 config.yaml）。"""
         if self.settings_path.exists():
-            with open(self.settings_path, "r", encoding="utf-8") as f:
+            with open(self.settings_path, encoding="utf-8") as f:
                 raw = yaml.safe_load(f) or {}
             self.settings = Settings(**raw)
             self.settings.validate_model_names()
@@ -111,8 +121,7 @@ class ConfigManager:
                 DEEPSEEK_MODEL=old.get("DEEPSEEK_MODEL", "deepseek-v4-flash"),
                 DEEPSEEK_ANALYZE_MODEL=old.get("DEEPSEEK_ANALYZE_MODEL", "deepseek-v4-pro"),
                 PORT=int(old.get("PORT", "5000")),
-                HOST=old.get("HOST", "0.0.0.0"),
-                GUI=old.get("GUI", "true"),
+                HOST=old.get("HOST", "127.0.0.1"),
                 DATA_DIR=old.get("DATA_DIR", old.get("EXPERMATE_DATA_DIR", old.get("EXDIARY_DATA_DIR", ""))),
             )
             self.save(self.settings)
@@ -142,17 +151,13 @@ class ConfigManager:
         if code != self.settings.DEVICE_CODE:
             self.settings.DEVICE_CODE = code
             changed = True
-        offline_code = normalize_device_code(self.settings.OFFLINE_DEVICE_CODE)
-        if not offline_code or offline_code == code:
-            offline_code = new_device_code()
-            while offline_code == code:
-                offline_code = new_device_code()
-        if offline_code != self.settings.OFFLINE_DEVICE_CODE:
-            self.settings.OFFLINE_DEVICE_CODE = offline_code
-            changed = True
         return changed
 
     def save(self, data: Settings | dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            return self._save(data)
+
+    def _save(self, data: Settings | dict[str, Any]) -> dict[str, Any]:
         """保存配置。dict 输入先规范化（表单字符串 → 类型）。
 
         落盘后原地更新传入 dict 与权威视图 view（外部引用保持新鲜）。
@@ -163,24 +168,30 @@ class ConfigManager:
             for k, v in data.items():
                 if k == "PORT" and isinstance(v, str):
                     normalized[k] = int(v)
-                elif k == "GUI":
-                    normalized[k] = str(v).lower() if isinstance(v, (bool, int)) else str(v).strip()
                 else:
                     normalized[k] = str(v).strip() if isinstance(v, str) else v
-            # 关键修复：与现有配置合并，避免"设置保存"重建整份 config 时，
-            # 把 STORAGE_BACKEND/RELAY_URL/RELAY_API_KEY/ENCRYPTION_KEY/JWT_SECRET 等
-            # 表单未提供的进阶字段重置为默认值（导致静默退回 YAML 后端/丢失中继配置）。
+            # 与现有配置合并，保留表单未提交的服务端密钥和运行参数。
             base = self.settings.model_dump() if self.settings is not None else {}
             merged = {**base, **normalized}
-            self.settings = Settings(**merged)
+            settings = Settings(**merged)
         else:
-            self.settings = data
-        clean: dict[str, Any] = self.settings.model_dump()
-        with open(self.settings_path, "w", encoding="utf-8") as f:
-            yaml.dump(clean, f, allow_unicode=True, sort_keys=False, default_flow_style=False, indent=2)
+            settings = data
+        clean: dict[str, Any] = settings.model_dump()
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=self.settings_path.parent,
+                                             prefix=".config-", suffix=".tmp", delete=False) as f:
+                temporary = f.name
+                yaml.dump(clean, f, allow_unicode=True, sort_keys=False, default_flow_style=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temporary, self.settings_path)
+        finally:
+            if temporary and os.path.exists(temporary):
+                os.unlink(temporary)
+        self.settings = settings
         if isinstance(data, dict):
             data.clear()
             data.update(clean)
-        self.view.clear()
-        self.view.update(clean)
+        self.view.update({**clean, **self.overrides})
         return clean

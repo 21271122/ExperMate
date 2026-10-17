@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { invoke } from '../../legacy/invoke';
+import { services } from '../../runtime/services';
 import { useChat, type Attachment } from './ChatContext';
 
 export function ChatComposer() {
@@ -20,7 +20,7 @@ export function ChatComposer() {
     setDraft(''); setFiles([]);
     if (textArea.current) textArea.current.style.height = 'auto';
     connection.ui.setSending(true);
-    (window as unknown as {ExdiarySound?:{play:(name:string)=>void}}).ExdiarySound?.play('message');
+    services.ExdiarySound?.play('message');
     void connection.client.sendMessage(message || '我上传了附件，请查看并处理。', files);
   }
   useEffect(() => { connection.ui.setComposer(send); return () => connection.ui.setComposer(undefined); });
@@ -71,7 +71,7 @@ export function ChatComposer() {
     }
   }
   return <div id="chat-input-area">
-    <div id="content-restore-btn" title="Restore panel" onClick={() => invoke('PanelManager.restoreContent')} />
+    <div id="content-restore-btn" title="Restore panel" onClick={() => services.PanelManager?.restoreContent()} />
     <input id="chat-attachment-file" ref={fileInput} type="file" multiple
       accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.pdf,.csv,.txt,.xlsx,.mp3,.ogg,.wav,.m4a,.aac,.flac,image/*,audio/*,application/pdf,text/csv,text/plain"
       style={{display:'none'}} onChange={event => { void upload([...(event.target.files || [])]); event.target.value = ''; }} />

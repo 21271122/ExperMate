@@ -2,18 +2,18 @@
 
 > 状态：当前实现
 >
-> 源码依据：`app.py`、`lib/e2ee/relay_server.py`
+> 源码依据：`app.py`、`wsgi.py`、`lib/config.py`
 
-ExperMate 主应用负责登录、实验、聊天、附件和模型调用。可选同步中继只保存加密后的同步数据。
+ExperMate 主应用集中负责账号、配置、实验、会话、附件和模型调用。当前主应用不再接入旧同步中继。初始化与导入见[服务端运行迁移说明](../server-runtime-migration.md)。
 
 ```text
-浏览器 / 桌面端
+浏览器
         │ HTTPS
         ▼
 Nginx ─────► ExperMate 主应用（Flask，单 worker，SQLite）
-        │
-        └────► 可选同步中继（Flask，保存加密数据包）
 ```
+
+正式上线按[部署与数据切换清单](production-cutover.md)逐项执行，包括目标确认、发布版本、配置、迁移、验收、切换与回退。
 
 ## 主应用（Ubuntu / Debian）
 
@@ -38,7 +38,8 @@ LLM_AGENT_API_KEY: 请替换为真实密钥
 LLM_AGENT_MODEL: 请填写可用模型
 HOST: 127.0.0.1
 PORT: 8765
-GUI: "false"
+ALLOW_REGISTRATION: false
+TRUSTED_PROXY_HOPS: 1
 ```
 
 ```bash
@@ -60,9 +61,9 @@ User=expermate
 Group=expermate
 WorkingDirectory=/opt/expermate/app
 Environment=EXDIARY_SETTINGS=/var/lib/expermate/config.yaml
-Environment=EXPERMATE_DATA_DIR=/var/lib/expermate/data
+Environment=EXPERMATE_DATA_DIR=/var/lib/expermate
 Environment=PYTHONUTF8=1
-ExecStart=/opt/expermate/venv/bin/gunicorn --workers 1 --threads 8 --bind 127.0.0.1:8765 --timeout 600 "app:create_app()"
+ExecStart=/opt/expermate/venv/bin/gunicorn --workers 1 --threads 8 --bind 127.0.0.1:8765 --timeout 1800 wsgi:application
 Restart=on-failure
 RestartSec=5
 
@@ -96,27 +97,15 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_buffering off;
-        proxy_read_timeout 620s;
+        proxy_read_timeout 1860s;
     }
 }
 ```
 
 为域名配置 HTTPS。不要把 Flask 开发服务器或未加密的登录入口直接暴露到公网。
 
-## 可选同步中继
+## 旧中继
 
-中继应使用独立 HTTPS 域名，并部署在 `127.0.0.1:5055` 后由 Nginx 反代：
+旧中继、同步网关和 Windows 凭据模块已删除。当前服务通过同一个服务端数据库共享数据，不配置 `RELAY_*`；旧协议只能从历史 Git 版本运行。
 
-```bash
-RELAY_PORT=5055 RELAY_DB=/var/lib/expermate/relay.db \
-  /opt/expermate/venv/bin/python -m lib.e2ee.relay_server
-```
-
-客户端设置：
-
-```yaml
-RELAY_URL: https://relay.example.com
-RELAY_API_KEY: 高强度随机密钥
-```
-
-升级前请先按[数据、备份与恢复](data-and-backup.md)完成备份。中继不解密数据，但中继运行数据同样需要访问控制、HTTPS 和独立备份。
+部署前构建 `frontend/dist/`；创建管理员时使用与 systemd 相同的数据目录和配置环境，执行 `python -m flask --app app:create_app create-user --account admin --email admin@example.com --admin`。旧离线数据按迁移文档显式导入，不能仅更改数据库路径代替归属迁移。

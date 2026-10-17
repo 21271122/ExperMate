@@ -1,3 +1,4 @@
+import { services } from '../../runtime/services';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -9,7 +10,7 @@ import { createAgentClient } from './agent-client';
 const json=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status});
 const wire=(event:unknown)=>new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`);
 type Bridge = {AgentClient: ReturnType<typeof createAgentClient>;ChatUI:Record<string,any>};
-const bridge=()=>window as unknown as Bridge;
+const bridge=()=>services as unknown as Bridge;
 
 async function mount(stream:()=>Response) {
   const fetchMock=vi.fn(async(path:string)=>{

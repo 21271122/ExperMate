@@ -1,5 +1,5 @@
 export type TableRow = Record<string, string>;
-export type Attachment = { sha256: string; url: string; name?: string; title?: string; caption?: string; mime?: string; size?: number; description?: string; sync_state?: string };
+export type Attachment = { sha256: string; url: string; name?: string; title?: string; caption?: string; mime?: string; size?: number; description?: string; has_content?: boolean };
 export type ExperimentDetailData = {
   id: string; revision?: number; title?: string; date?: string; end_date?: string; experimenter?: string; status?: string; archived?: boolean;
   tags?: string[]; original_notes?: string; purpose?: string; conclusion?: string; sop?: string[]; next_steps?: string[];
@@ -18,10 +18,7 @@ export const tableFields = {
 };
 export const resultTable = { keys: ['metric', 'value', 'comparison', 'change'], headers: ['指标', '数值', '对比对象', '变化'] };
 export const escapeHtml = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-export function markdown(value: string) {
-  const marked = (window as unknown as { marked?: { parse: (text: string) => string } }).marked;
-  return marked ? marked.parse(value) : escapeHtml(value);
-}
+export { markdown } from '../../shared/markdown';
 // 用可编辑字段比较脏状态；保存时提交带原版本号的完整快照，保留附件及扩展字段。
 export function editableData(exp: ExperimentDetailData) {
   const keys = ['title', 'date', 'end_date', 'experimenter', 'status', 'tags', 'original_notes', 'purpose', 'conclusion',

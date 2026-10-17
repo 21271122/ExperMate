@@ -1,9 +1,10 @@
+import pageStyles from '../../styles/settings.css?inline';
 import type { ChangeEvent, FormEvent } from 'react';
 export type ControlProps = {value?:string;checked?:boolean;disabled?:boolean;onChange:(event:ChangeEvent<HTMLInputElement|HTMLSelectElement>)=>void};
-type Props = {field:(name:string)=>ControlProps;soundField:(name:string)=>ControlProps;theme:string;setTheme:(theme:string)=>void;tracks:{id:string;title:string}[];agentPlaceholder:string;analyzePlaceholder:string;pending:boolean; submit:(event:FormEvent<HTMLFormElement>)=>void;providers:{id:string;label:string;base_url:string}[];maskedAgent:string;maskedAnalyze:string;message:string;failed:boolean};
+type Props = {canConfigure:boolean;field:(name:string)=>ControlProps;soundField:(name:string)=>ControlProps;theme:string;setTheme:(theme:string)=>void;tracks:{id:string;title:string}[];agentPlaceholder:string;analyzePlaceholder:string;pending:boolean; submit:(event:FormEvent<HTMLFormElement>)=>void;providers:{id:string;label:string;base_url:string}[];maskedAgent:string;maskedAnalyze:string;message:string;failed:boolean};
 // 按原设置模板转换，保留标签层级、文字和内联样式。
-export function SettingsForm({field,soundField,theme,setTheme,tracks,agentPlaceholder,analyzePlaceholder,pending,submit,providers,maskedAgent,maskedAnalyze,message,failed}:Props){return <>
-    <link rel={"stylesheet"} href={"/static/css/settings.css"} />
+export function SettingsForm({canConfigure,field,soundField,theme,setTheme,tracks,agentPlaceholder,analyzePlaceholder,pending,submit,providers,maskedAgent,maskedAnalyze,message,failed}:Props){return <>
+    <style>{pageStyles}</style>
     <section className={"settings-content"}>
       <h1 style={{"borderBottom": "none", "paddingBottom": "0"}}>
         {"设置"}
@@ -12,6 +13,7 @@ export function SettingsForm({field,soundField,theme,setTheme,tracks,agentPlaceh
         {"配置模型、兼容接口与服务"}
       </p>
       {message && <div className={`flash flash-${failed ? "error" : "success"}`} role="status" style={{borderLeft:"8px solid var(--black)"}}>{message}</div>}
+      {!canConfigure && <p className="flash">模型配置由服务端管理员管理；外观和声音偏好可在本机调整。</p>}
       <form onSubmit={submit} style={{"marginTop": "1.5rem"}}>
         <h3 style={{"margin": "1.2rem 0 0.3rem"}}>
           {"助手与结构化提取模型"}
@@ -148,39 +150,6 @@ export function SettingsForm({field,soundField,theme,setTheme,tracks,agentPlaceh
           {"已内置 DeepSeek、千问、GLM、Kimi、MiniMax、百度 AI Studio/千帆、火山方舟预设；也可填写任意 OpenAI Chat Completions 兼容地址。厂商侧仍须确认所选 Agent 模型支持 Function Calling。"}
         </p>
         <hr style={{"border": "3px solid var(--black)", "margin": "1.5rem 0"}} />
-        <div style={{"display": "flex", "gap": "1rem", "flexWrap": "wrap"}}>
-          <div style={{"flex": "1", "minWidth": "120px"}}>
-            <label>
-              <strong>
-                {"端口"}
-              </strong>
-            </label>
-            <input {...field("PORT")} type={"number"} id={"port"} name={"PORT"} min={"1024"} max={"65535"} />
-          </div>
-          <div style={{"flex": "2", "minWidth": "180px"}}>
-            <label>
-              <strong>
-                {"主机地址"}
-              </strong>
-            </label>
-            <input {...field("HOST")} type={"text"} id={"host"} name={"HOST"} />
-          </div>
-        </div>
-        <label style={{"marginTop": "1rem", "display": "flex", "alignItems": "center", "gap": "0.5rem", "cursor": "pointer"}}>
-          <input {...field("GUI")} type={"checkbox"} name={"GUI"} style={{"width": "auto"}} />
-          <span>
-            <strong>
-              {"启动时打开桌面窗口"}
-            </strong>
-            <br />
-            <small style={{"fontWeight": "500", "opacity": "0.6"}}>
-              {"需要 pywebview；未安装时会以浏览器模式打开。"}
-            </small>
-          </span>
-        </label>
-        <p style={{"fontWeight": "700", "fontSize": "0.75rem", "opacity": "0.5", "marginTop": "0.5rem", "letterSpacing": "0.5px"}}>
-          {"\n    修改端口或主机地址后需要重启。\n  "}
-        </p>
         <label style={{"marginTop": "1rem"}}>
           <strong>
             {"外观"}
@@ -250,7 +219,7 @@ export function SettingsForm({field,soundField,theme,setTheme,tracks,agentPlaceh
             </small>
           </label>
         </section>
-        <button type={"submit"} disabled={pending} style={{"minWidth": "140px", "marginTop": "1rem"}}>
+        <button type={"submit"} disabled={pending || !canConfigure} style={{"minWidth": "140px", "marginTop": "1rem"}}>
           {"保存设置"}
         </button>
       </form>

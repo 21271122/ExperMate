@@ -23,7 +23,7 @@ class ThreadSafeConnection:
     """共享 sqlite 连接的线程安全薄代理。
 
     同一连接始终串行使用；不同连接的读取可并行。写入仍用全局锁串行化，
-    避免后台同步的读取堵住页面读取，同时保留 SQLite 单写者保护。
+    同时保留 SQLite 单写者保护。
     仓储只用到 row_factory/execute/executescript/commit，故代理覆盖这些就够。
     """
 
@@ -73,7 +73,7 @@ class UserScopeMixin:
     """提供 _uid() 用户作用域解析。
 
     容器在请求上下文中注入 `lambda: g.user_id`；无注入时返回 ""
-    （离线模式 / 纯 Python 测试环境）。
+    （纯 Python 测试环境）。
     """
 
     def __init__(self, uid_provider: Callable[[], str] | None = None) -> None:

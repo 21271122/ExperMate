@@ -1,9 +1,10 @@
+import { services } from '../../runtime/services';
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createAgentClient } from './agent-client';
-import { createToolCards } from './tool-cards';
+import type { ToolResult } from './tool-model';
+export type { ToolResult } from './tool-model';
 
 export type Attachment = { sha256: string; name?: string; mime?: string; size?: number };
-export type ToolResult = Record<string, any>;
 export type ChatRow = {
   id: number; role: string; content: string; createdAt: string; attachments?: Attachment[];
   kind?: 'error' | 'tool' | 'compression'; tool?: ToolResult; toolCallId?: string;
@@ -57,7 +58,7 @@ function createController(update: (change: (state: ChatState) => ChatState) => v
         createdAt: data.created_at, historical, animate: !historical && !renderingHistory });
     },
     onError(text: string) {
-      (window as unknown as {ExdiarySound?:{play:(name:string)=>void}}).ExdiarySound?.play('general');
+      services.ExdiarySound?.play('general');
       const id = streaming;
       streaming = null;
       update(state => ({ ...state, rows: (state.rows || []).filter(row => row.id !== id) }));
@@ -98,12 +99,6 @@ function createController(update: (change: (state: ChatState) => ChatState) => v
       else if (bottom) element.scrollTop = element.scrollHeight;
       bottom = false;
     },
-    saveAgentState() {
-      try { sessionStorage.setItem('exdiary_agent_state', JSON.stringify(client.getState())); } catch { /* 可选缓存 */ }
-    },
-    restoreAgentState() {
-      try { return JSON.parse(sessionStorage.getItem('exdiary_agent_state') || 'null'); } catch { return null; }
-    },
     showToast(message: string) {
       const element = document.createElement('div');
       element.className = 'toast'; element.textContent = message; document.body.appendChild(element);
@@ -119,11 +114,10 @@ function createController(update: (change: (state: ChatState) => ChatState) => v
     dispose() { client.dispose(); timers.forEach(clearTimeout); document.querySelectorAll('.toast').forEach(element => element.remove()); },
   };
   const client = createAgentClient(ui);
-  const tools = createToolCards(ui);
-  return { ui: Object.assign(ui, tools), client, tools };
+  return { ui, client };
 }
 
-type Connection = ReturnType<typeof createController>;
+export type Connection = ReturnType<typeof createController>;
 const ChatContext = createContext<{ state: ChatState; connection: Connection } | null>(null);
 
 export function ChatProvider({ children }: { children: ReactNode }) {
@@ -131,17 +125,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const mounted = useRef(true);
   const [connection] = useState(() => createController(change => { if (mounted.current) setState(change); }));
   useLayoutEffect(() => {
-    Object.assign(window, { AgentClient: connection.client, ChatUI: connection.ui });
+    Object.assign(services, { AgentClient: connection.client, ChatUI: connection.ui });
     return () => {
       mounted.current = false;
       connection.ui.dispose();
-      Reflect.deleteProperty(window, 'AgentClient'); Reflect.deleteProperty(window, 'ChatUI');
+      Reflect.deleteProperty(services, 'AgentClient'); Reflect.deleteProperty(services, 'ChatUI');
     };
   }, [connection]);
   useLayoutEffect(() => connection.ui.adjustScroll(), [state.rows, connection]);
   useEffect(() => {
-    const legacy = window as unknown as { startColorDivider?: () => void; stopColorDivider?: () => void };
-    if (state.busy) legacy.startColorDivider?.(); else legacy.stopColorDivider?.();
+    if (state.busy) services.startColorDivider?.(); else services.stopColorDivider?.();
     document.getElementById('chat-brand')?.classList.toggle('agent-active', state.busy);
   }, [state.busy]);
   return <ChatContext.Provider value={{ state, connection }}>{children}</ChatContext.Provider>;
@@ -153,12 +146,7 @@ export function useChat() {
   return context;
 }
 
-export function markdown(content: string) {
-  const parser = (window as unknown as { marked?: { parse: (text: string) => string } }).marked;
-  if (parser) return parser.parse(content);
-  const element = document.createElement('div'); element.textContent = content;
-  return element.innerHTML.replace(/\n/g, '<br>');
-}
+export { markdown } from '../../shared/markdown';
 
 export function formatTime(createdAt: string) {
   const date = new Date(createdAt);

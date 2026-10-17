@@ -1,3 +1,4 @@
+import { services } from '../../runtime/services';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 type Dialog = 'account' | 'auth' | 'forgot' | 'password' | 'email' | null;
@@ -75,14 +76,13 @@ export function useAccountState(onSessionChanged: () => void) {
 
   useEffect(() => {
     const bridge = {
-      ExperMateReactAuth: true,
       ExperMateAccount: { verifySession: refresh, clearLogin: () => { clearSession(); setAccount(''); } },
       showAuthModal: () => open('auth'),
       showAccountModal: () => open(account ? 'account' : 'auth'),
     };
-    Object.assign(window, bridge);
+    Object.assign(services, bridge);
     return () => {
-      for (const key of Object.keys(bridge)) Reflect.deleteProperty(window, key);
+      for (const key of Object.keys(bridge)) Reflect.deleteProperty(services, key);
     };
   }, [account, refresh]);
 

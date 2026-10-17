@@ -11,11 +11,9 @@ from lib.repositories.sqlite_common import UserScopeMixin
 
 
 class SqliteUpdateLogRepository(AbstractUpdateLogRepository, UserScopeMixin):
-    def __init__(self, db: sqlite3.Connection, uid_provider=None, on_dirty=None) -> None:
-        """on_dirty: 写入后同步标记回调（更新日志实体）。"""
+    def __init__(self, db: sqlite3.Connection, uid_provider=None) -> None:
         UserScopeMixin.__init__(self, uid_provider)
         self.db = db
-        self._on_dirty = on_dirty
         self.db.row_factory = sqlite3.Row
         self._create_tables()
 
@@ -41,9 +39,6 @@ class SqliteUpdateLogRepository(AbstractUpdateLogRepository, UserScopeMixin):
         except sqlite3.OperationalError:
             pass
 
-    def _mark_dirty(self, entry_id: str) -> None:
-        if self._on_dirty is not None:
-            self._on_dirty(entry_id, False)
 
     def _next_entry_id(self, exp_id: str) -> str:
         exp_key = re.sub(r"[^A-Z0-9]", "", exp_id.upper())[-12:] or "UNKNOWN"
@@ -79,7 +74,6 @@ class SqliteUpdateLogRepository(AbstractUpdateLogRepository, UserScopeMixin):
                 json.dumps(changes, ensure_ascii=False),
             ),
         )
-        self._mark_dirty(entry_id)
         return entry_id
 
     def list_recent(self, exp_id: str, limit: int = 5) -> list[dict[str, Any]]:
@@ -102,28 +96,6 @@ class SqliteUpdateLogRepository(AbstractUpdateLogRepository, UserScopeMixin):
             (entry_id, exp_id, self._uid()),
         ).fetchone()
         return _row_to_entry(row) if row else None
-
-    # ---- 同步接口 ----
-
-    def get_entry_by_id(self, entry_id: str) -> dict | None:
-        row = self.db.execute(
-            "SELECT * FROM update_logs WHERE entry_id = ?", (entry_id,)
-        ).fetchone()
-        return _row_to_entry(row) if row else None
-
-    def import_entry(self, entry: dict) -> None:
-        self.db.execute(
-            "INSERT OR REPLACE INTO update_logs "
-            "(user_id, entry_id, exp_id, \"timestamp\", source, thread_id, context, changes) "
-            "VALUES (?,?,?,?,?,?,?,?)",
-            (
-                entry.get("user_id", ""), entry["entry_id"], entry["exp_id"],
-                entry.get("timestamp", ""), entry.get("source", ""),
-                entry.get("thread_id", ""),
-                json.dumps(entry.get("context", {}), ensure_ascii=False),
-                json.dumps(entry.get("changes", []), ensure_ascii=False),
-            ),
-        )
 
 
 def _row_to_entry(row: sqlite3.Row) -> dict[str, Any]:

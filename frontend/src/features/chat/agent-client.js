@@ -1,3 +1,4 @@
+import { services } from '../../runtime/services';
 // 从原 AgentClient 提取为组件持有的实例，保留协议与历史兼容。
 import { readJsonEvents } from './events';
 export function createAgentClient(ui) {
@@ -30,15 +31,8 @@ export function createAgentClient(ui) {
   var _historyLoading = false;
   var _analysisTimeoutSeconds = 8 * 60;
 
-  function getToken() {
-    return localStorage.getItem("exdiary_token") || "";
-  }
-
   function authHeaders() {
-    var h = { "Content-Type": "application/json" };
-    var t = getToken();
-    if (t) h["Authorization"] = "Bearer " + t;
-    return h;
+    return { "Content-Type": "application/json" };
   }
 
   // ---- Public API ----
@@ -97,14 +91,6 @@ export function createAgentClient(ui) {
   function setAnalysisTimeoutSeconds(value) {
     var parsed = Number(value);
     if (Number.isFinite(parsed)) _analysisTimeoutSeconds = Math.max(60, Math.min(parsed, 30 * 60));
-  }
-
-  // ---- State persistence ----
-
-  function saveAgentState() {
-    if (typeof ui !== "undefined" && ui.saveAgentState) {
-      ui.saveAgentState();
-    }
   }
 
   // ---- UI helpers (delegate to ui if available) ----
@@ -174,7 +160,6 @@ export function createAgentClient(ui) {
     _uiFinishPrepare(true);
     _updateThreadColor();
     if (_onStateChange) _onStateChange(_state);
-    saveAgentState();
   }
 
   function _appendHistory(messages, skipUserContent, skipAssistantContents) {
@@ -269,8 +254,8 @@ export function createAgentClient(ui) {
   function _handleRemoteEvent(evt) {
     if (!evt || evt.origin_id === _clientId) return;
     if (evt.event === "resource_changed") {
-      if (window.PanelManager && PanelManager.handleResourceChange) {
-        PanelManager.handleResourceChange(evt);
+      if (services.PanelManager && services.PanelManager.handleResourceChange) {
+        services.PanelManager.handleResourceChange(evt);
       } else if (typeof ui !== "undefined" && ui.showToast) {
         ui.showToast("实验 " + (evt.exp_id || "") + " 已在另一窗口更新");
       }
@@ -314,8 +299,8 @@ export function createAgentClient(ui) {
       }
       _setSendUIBusy(true);
     } else if (evt.event === "tool_done") {
-      if (evt.music_control && window.ExdiarySound && ExdiarySound.applyMusicControl) {
-        ExdiarySound.applyMusicControl(evt.music_control);
+      if (evt.music_control && services.ExdiarySound && services.ExdiarySound.applyMusicControl) {
+        services.ExdiarySound.applyMusicControl(evt.music_control);
       }
       _renderLiveToolCard(evt);
       _updateStatus("正在思考…");
@@ -341,7 +326,6 @@ export function createAgentClient(ui) {
       }
       _updateStatus("");
       _clearQuickReplies();
-      saveAgentState();
       _remoteRequestId = null;
       _remoteStreamContent = "";
       _remoteStreamStarted = false;
@@ -377,13 +361,6 @@ export function createAgentClient(ui) {
 
   // ---- Start / Send ----
 
-  function _getCachedState() {
-    if (typeof ui !== "undefined" && ui.restoreAgentState) {
-      return ui.restoreAgentState();
-    }
-    return null;
-  }
-
   function _uiClearAndPrepare() {
     if (typeof ui !== "undefined") {
       if (ui.clearMessages)  ui.clearMessages();
@@ -403,9 +380,7 @@ export function createAgentClient(ui) {
     if (typeof ui !== "undefined" && ui.setLoadOlder) ui.setLoadOlder(loadOlderHistory);
     // 服务端运行态由各窗口共享；刷新时必须优先读取它，而不是本窗口旧缓存。
     var state = null;
-    var isRestored = false;
     var data = null;
-    var cached = _getCachedState();
 
     try {
       var r = await fetch("/api/agent/start", {
@@ -413,24 +388,14 @@ export function createAgentClient(ui) {
       });
       data = await r.json();
       setAnalysisTimeoutSeconds(data.analysis_timeout_seconds);
-      if (!data.ok) {
-        if (!cached) {
-          if (_onError) _onError(data.error || "Agent init failed");
-          return false;
-        }
-        state = cached;
-        isRestored = true;
-      } else {
-        state = data.state;
-      }
-    } catch (e) {
-      if (cached) {
-        state = cached;
-        isRestored = true;
-      } else {
-        if (!_disposed && _onError) _onError(e.message);
+      if (!r.ok || !data.ok) {
+        if (!_disposed && _onError) _onError(data.error?.message || data.error || "Agent init failed");
         return false;
       }
+      state = data.state;
+    } catch (e) {
+      if (!_disposed && _onError) _onError(e.message);
+      return false;
     }
 
     _replaceState(state,
@@ -438,8 +403,8 @@ export function createAgentClient(ui) {
       data && data.history_start !== undefined ? data.history_start : 0,
       data && data.history_total !== undefined ? data.history_total : undefined);
 
-    // Greeting only for fresh fetch (not restore — history already has it)
-    if (!isRestored && data && data.message) {
+    // 已持久化的问候随历史渲染一次，兼容没有历史正文的响应。
+    if (data && data.message && !_history.some(message => message.role === 'assistant' && message.content === data.message)) {
       if (_onMessage) _onMessage({ role: "agent", content: data.message });
     }
 
@@ -491,8 +456,8 @@ export function createAgentClient(ui) {
               streamContent = "";
             }
           } else if (evt.event === "tool_done") {
-            if (evt.music_control && window.ExdiarySound && ExdiarySound.applyMusicControl) {
-              ExdiarySound.applyMusicControl(evt.music_control);
+            if (evt.music_control && services.ExdiarySound && services.ExdiarySound.applyMusicControl) {
+              services.ExdiarySound.applyMusicControl(evt.music_control);
             }
             _renderLiveToolCard(evt);
             _updateStatus("正在思考…");
@@ -526,8 +491,7 @@ export function createAgentClient(ui) {
             }
             _updateStatus("");
             _clearQuickReplies();
-            saveAgentState();
-            if (window.ExdiarySound) window.ExdiarySound.play("message");
+            if (services.ExdiarySound) services.ExdiarySound.play("message");
           } else if (evt.event === "error") {
             if (_onError) _onError(evt.message || "Stream error");
             _updateStatus("");
@@ -685,7 +649,6 @@ export function createAgentClient(ui) {
     isSending: isSending,
     getClientId: getClientId,
     setAnalysisTimeoutSeconds: setAnalysisTimeoutSeconds,
-    saveAgentState: saveAgentState,
     resolveSelector: resolveSelector,
     searchHistory: searchHistory,
     readHistoryContext: readHistoryContext,

@@ -1,6 +1,6 @@
 """线程的 SQLite 仓储实现（替代 YAML ThreadRepository）。
 
-覆盖要同步的「线程 / 线程索引 / 用户画像」：线程本体 → `threads` 表；
+保存服务端「线程 / 线程索引 / 用户画像」：线程本体 → `threads` 表；
 索引/运行态/画像 → `kv_store` 表。接口与 `AbstractThreadRepository` 完全一致，
 路由经 `g.thread_repo` 调用零改动。
 
@@ -11,8 +11,7 @@
 - kv_store(user_id, key, value, updated_at)，PK(user_id,key) ——
   key ∈ {index, current_state, global_context, child_state:<tid>}
 
-同步语义：线程本体/索引/画像为可同步"资产快照"；current_state / child_state /
-global_context 为设备本地运行时状态（入库统一存储但不上传）——写钩子由上层区分。
+线程、主/子会话、历史和画像均由服务端按账号保存。
 """
 
 from __future__ import annotations
@@ -23,13 +22,13 @@ import sqlite3
 from datetime import datetime
 from typing import Any
 
+from lib.experiment_ids import is_experiment_id
 from lib.repositories.base import (
     AbstractExperimentRepository,
     AbstractThreadRepository,
     AbstractUpdateLogRepository,
 )
 from lib.repositories.sqlite_common import UserScopeMixin
-from lib.experiment_ids import is_experiment_id
 
 _JSON_FIELDS = ("selected_exps", "messages", "branches")
 
@@ -43,15 +42,11 @@ _INDEX_DEFAULT_USER_PROFILE: dict[str, Any] = {
 
 
 class SqliteThreadRepository(AbstractThreadRepository, UserScopeMixin):
-    def __init__(self, db: sqlite3.Connection, uid_provider=None, on_dirty=None) -> None:
+    def __init__(self, db: sqlite3.Connection, uid_provider=None) -> None:
         UserScopeMixin.__init__(self, uid_provider)
         self.db = db
         self.db.row_factory = sqlite3.Row
-        self._on_dirty = on_dirty
-        self._index_cache: dict[str, Any] | None = None
         self._l0_generated_at: datetime | None = None
-        self._l0_cache: str | None = None
-        self._l0_cache_at: datetime | None = None
         self._create_tables()
 
     # ------------------------------------------------------------------ DDL
@@ -152,12 +147,6 @@ class SqliteThreadRepository(AbstractThreadRepository, UserScopeMixin):
         if not has_fts:
             self._backfill_chat_history_fts()
 
-    # ------------------------------------------------------------ 标记脏
-
-    def _mark_dirty(self, entity_id: str, tombstone: bool = False) -> None:
-        if self._on_dirty is not None:
-            self._on_dirty(entity_id, tombstone)
-
     # ------------------------------------------------------------ KV 助手
 
     def _kv_get(self, key: str) -> dict[str, Any]:
@@ -244,8 +233,6 @@ class SqliteThreadRepository(AbstractThreadRepository, UserScopeMixin):
         )
         self.db.commit()
         self.update_index(thread_data)
-        self._index_cache = None
-        self._mark_dirty(tid)
 
     def load(self, thread_id: str) -> dict[str, Any] | None:
         row = self.db.execute(
@@ -266,29 +253,25 @@ class SqliteThreadRepository(AbstractThreadRepository, UserScopeMixin):
     # ------------------------------------------------------------ 索引
 
     def _load_index(self) -> dict[str, Any]:
-        if self._index_cache is not None:
-            return self._index_cache
         idx = self._kv_get("index") or {}
         idx.setdefault("active_thread", None)
         idx.setdefault("threads", [])
         idx.setdefault("exp_to_thread", {})
         idx.setdefault("anal_to_thread", {})
         idx.setdefault("user_profile", dict(_INDEX_DEFAULT_USER_PROFILE))
-        self._index_cache = idx
         return idx
 
     def get_index(self) -> dict[str, Any]:
         return json.loads(json.dumps(self._load_index()))  # 深拷贝，防外部改动污染缓存
 
     def set_index(self, data: dict[str, Any]) -> None:
-        """整体写回索引（供同步拉取落库）。入参含 user_profile 一并生效。"""
+        """整体写回服务端线程索引。入参含 user_profile 一并生效。"""
         idx = json.loads(json.dumps(data))
         idx.setdefault("active_thread", None)
         idx.setdefault("threads", [])
         idx.setdefault("exp_to_thread", {})
         idx.setdefault("anal_to_thread", {})
         idx.setdefault("user_profile", dict(_INDEX_DEFAULT_USER_PROFILE))
-        self._index_cache = idx
         self._kv_set("index", idx)
 
     def update_index(self, thread_data: dict[str, Any]) -> None:
@@ -317,7 +300,6 @@ class SqliteThreadRepository(AbstractThreadRepository, UserScopeMixin):
         if thread_data.get("anal_generated") and \
                 thread_data["anal_generated"] not in idx["anal_to_thread"]:
             idx["anal_to_thread"][thread_data["anal_generated"]] = tid
-        self._index_cache = idx
         self._kv_set("index", idx)
 
     def _append_thread_entry(self, tid, ttype, status, title, summary, created, updated) -> None:
@@ -326,7 +308,6 @@ class SqliteThreadRepository(AbstractThreadRepository, UserScopeMixin):
             "id": tid, "type": ttype, "status": status, "title": title,
             "summary": summary, "created": created, "updated": updated,
         })
-        self._index_cache = idx
         self._kv_set("index", idx)
 
     # ------------------------------------------------------------ 活跃线程
@@ -353,7 +334,6 @@ class SqliteThreadRepository(AbstractThreadRepository, UserScopeMixin):
                     t["status"] = "done"
                     self.save(t)
             idx["active_thread"] = thread_id
-        self._index_cache = idx
         self._kv_set("index", idx)
 
     def list_recent(self, n: int = 5) -> list[dict[str, Any]]:
@@ -709,7 +689,6 @@ class SqliteThreadRepository(AbstractThreadRepository, UserScopeMixin):
 
     # ------------------------------------------------------------ L0 摘要 / 全局上下文
 
-    _L0_TTL_SECONDS = 300  # 5 分钟缓存
 
     def build_global_summary(
         self,
@@ -717,12 +696,6 @@ class SqliteThreadRepository(AbstractThreadRepository, UserScopeMixin):
         update_log_repo: AbstractUpdateLogRepository | None,
     ) -> str:
         """SQL 聚合生成 L0 摘要，输出格式与 YAML 版保持一致。"""
-        # 缓存命中：5 分钟内直接返回
-        if (self._l0_cache is not None and self._l0_cache_at is not None
-                and (datetime.now() - self._l0_cache_at).total_seconds() < self._L0_TTL_SECONDS):
-            self._l0_generated_at = self._l0_cache_at
-            return self._l0_cache
-
         uid = self._uid()
         lines: list[str] = []
 
@@ -785,14 +758,7 @@ class SqliteThreadRepository(AbstractThreadRepository, UserScopeMixin):
 
         self._l0_generated_at = datetime.now()
         result = "\n".join(lines) if lines else "暂无实验记录。"
-        self._l0_cache = result
-        self._l0_cache_at = self._l0_generated_at
         return result
-
-    def invalidate_l0_cache(self) -> None:
-        """清除 L0 缓存，下次 build_global_summary 会重新查询。"""
-        self._l0_cache = None
-        self._l0_cache_at = None
 
     def get_l0_generated_at(self) -> datetime | None:
         return self._l0_generated_at
@@ -831,7 +797,6 @@ class SqliteThreadRepository(AbstractThreadRepository, UserScopeMixin):
             if counts.get(experimenter, 0) >= counts.get(profile.get("default_experimenter", ""), 0):
                 profile["default_experimenter"] = experimenter
         profile["last_updated"] = datetime.now().strftime("%Y-%m-%d")
-        self._index_cache = idx
         self._kv_set("index", idx)
 
     def recalc_tag_counts(self, exp_repo: AbstractExperimentRepository) -> None:
@@ -848,5 +813,4 @@ class SqliteThreadRepository(AbstractThreadRepository, UserScopeMixin):
         profile["tag_counts"] = tag_counts
         profile["frequent_tags"] = [t for t, _ in sorted_tags[:10]]
         profile["last_updated"] = datetime.now().strftime("%Y-%m-%d")
-        self._index_cache = idx
         self._kv_set("index", idx)

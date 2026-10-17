@@ -1,7 +1,6 @@
 """SQLite 建表 SQL 与字段默认值 — 公共常量。
 
-原定义于 sqlite_experiment.py（下划线私有），被 offline.py / sync_service.py
-跨模块引用，故提升为公共模块，成为 SQLite 模式的单一数据定义源。
+实验仓储与显式工作区导入共用的表结构定义。
 """
 
 from typing import Any

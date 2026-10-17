@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { readJsonEvents } from '../chat/events';
-import { invoke } from '../../legacy/invoke';
-import { requestJson } from './api';
+import { services } from '../../runtime/services';
+import { requestJson } from '../../shared/api';
 import { escapeHtml, markdown } from './detail-model';
 
 type Message = { role: string; content?: string; attachments?: { name?: string }[]; created_at?: string; tool_calls?: unknown[]; separator?: boolean };
@@ -15,12 +15,11 @@ function messageHtml(message: Message) {
 export function ChildConversation({ expId, updated, kind = 'experiment' }: { expId: string; updated: () => void; kind?: 'experiment' | 'analysis' }) {
   const [messages, setMessages] = useState<Message[]>([]), [draft, setDraft] = useState(''), [busy, setBusy] = useState(false), [loading, setLoading] = useState(true);
   const [legacy, setLegacy] = useState(false), [preview, setPreview] = useState<Record<string, unknown> | null>(null), [error, setError] = useState(''), [status, setStatus] = useState(''), [turn, setTurn] = useState(0);
-  const session = useRef<ChildState | null>(null), controller = useRef(new AbortController()), pending = useRef(false), list = useRef<HTMLDivElement>(null), divider = useRef<HTMLDivElement>(null);
+  const controller = useRef(new AbortController()), pending = useRef(false), list = useRef<HTMLDivElement>(null), divider = useRef<HTMLDivElement>(null);
   const analysis = kind === 'analysis', placeholder = analysis ? '输入想核对的问题…' : '描述需要修改的内容…';
-  const endpoint = `/api/${analysis ? 'analysis' : 'exp'}/${encodeURIComponent(expId)}/chat`, key = (analysis ? 'exdiary_analysis_child_' : 'exdiary_child_') + expId;
+  const endpoint = `/api/${analysis ? 'analysis' : 'exp'}/${encodeURIComponent(expId)}/chat`;
   function persist(state: ChildState) {
-    session.current = state; setTurn(Number(state.turn_count || 0));
-    try { sessionStorage.setItem(key, JSON.stringify(state)); } catch { /* 会话持久化为可选缓存 */ }
+    setTurn(Number(state.turn_count || 0));
   }
   function history(state: ChildState) {
     const split = state._child_initial_history_len || 0; let earlier = false;
@@ -32,9 +31,8 @@ export function ChildConversation({ expId, updated, kind = 'experiment' }: { exp
     }); setMessages(rows);
   }
   useEffect(() => {
-    let saved = null; try { saved = JSON.parse(sessionStorage.getItem(key) || 'null'); } catch { /* 忽略损坏缓存 */ }
-    const signal = controller.current.signal; session.current = saved;
-    void requestJson(endpoint, { method: 'POST', signal, body: JSON.stringify({ message: '', ...(saved ? { state: saved } : {}) }) }).then(data => {
+    const signal = controller.current.signal;
+    void requestJson(endpoint, { method: 'POST', signal, body: JSON.stringify({ message: '' }) }).then(data => {
       if (signal.aborted) return;
       setLegacy(!!data.is_legacy); if (data.state) { persist(data.state); history(data.state); }
     }).catch(reason => { if (!signal.aborted) setError('加载失败：' + reason.message); }).finally(() => { if (!signal.aborted) setLoading(false); });
@@ -60,9 +58,9 @@ export function ChildConversation({ expId, updated, kind = 'experiment' }: { exp
     let text = '', streaming = false;
     try {
       const response = await fetch(endpoint, { method: 'POST', signal: controller.current.signal,
-        headers: { 'Content-Type': 'application/json', 'X-Exdiary-Client-Id': invoke('AgentClient.getClientId') || '' },
-        body: JSON.stringify({ message: content, created_at, stream: true, ...(initialLegacy ? { is_legacy: true } : session.current ? { state: session.current } : {}) }) });
-      if (!response.ok) { if (response.status === 401) invoke('showAuthModal'); const body = await response.json(); throw new Error(body.error || '请求失败'); }
+        headers: { 'Content-Type': 'application/json', 'X-Exdiary-Client-Id': services.AgentClient?.getClientId() || '' },
+        body: JSON.stringify({ message: content, created_at, stream: true, ...(initialLegacy ? { is_legacy: true } : {}) }) });
+      if (!response.ok) { if (response.status === 401) services.showAuthModal?.(); const body = await response.json(); throw new Error(body.error || '请求失败'); }
       let complete = false;
       for await (const event of readJsonEvents(response)) {
         if (controller.current.signal.aborted) return;
@@ -86,8 +84,8 @@ export function ChildConversation({ expId, updated, kind = 'experiment' }: { exp
   async function confirmChanges() {
     if (pending.current) return; pending.current = true; setBusy(true);
     try {
-      await requestJson(`/api/exp/${encodeURIComponent(expId)}/confirm`, { method: 'POST', signal: controller.current.signal, body: JSON.stringify({ preview, state: session.current }) });
-      sessionStorage.removeItem(key); updated();
+      await requestJson(`/api/exp/${encodeURIComponent(expId)}/confirm`, { method: 'POST', signal: controller.current.signal, body: JSON.stringify({}) });
+      updated();
     } catch (reason) { if (!controller.current.signal.aborted) setError((reason as Error).message); }
     finally { pending.current = false; if (!controller.current.signal.aborted) setBusy(false); }
   }

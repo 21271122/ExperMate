@@ -20,45 +20,37 @@ from lib.repositories.sqlite_thread import SqliteThreadRepository
 
 @pytest.fixture(scope="module")
 def sqlite_app(tmp_path_factory):
-    import importlib.util
-    import sys
-
-    import lib.offline as offmod
-    import lib.e2ee.flask_setup as e2ee
-
+    from app import create_app
+    from lib.auth import create_token
     tmp = tmp_path_factory.mktemp("sqlite-app")
-    settings = tmp / "config.yaml"
-    settings.write_text("{}", encoding="utf-8")
-    source = Path(__file__).resolve().parent.parent / "app.py"
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setenv("EXDIARY_SETTINGS", str(settings))
-        patch.setenv("EXPERMATE_DATA_DIR", str(tmp))
-        patch.setenv("EXDIARY_DB", str(tmp / "data.db"))
-        patch.delenv("EXDIARY_ENC_KEY", raising=False)
-        patch.setattr(offmod, "offline_db_path", lambda: tmp / "offline.db")
-        patch.setattr(e2ee, "_ACCOUNT_DB", tmp / "_e2ee_accounts.db")
-        patch.setattr(e2ee, "_KMS_KEY_FILE", tmp / "_e2ee_kms.key")
-        spec = importlib.util.spec_from_file_location("sqlite_smoke_app", source)
-        appmod = importlib.util.module_from_spec(spec)
-        patch.setitem(sys.modules, "sqlite_smoke_app", appmod)
-        spec.loader.exec_module(appmod)
-        app = appmod.create_app()
-        app.config.update(TESTING=True, SMOKE_DATA_DIR=tmp)
-        try:
-            yield app
-        finally:
-            appmod.ctx.shutdown()
-            security = app.extensions.get("e2ee")
-            if security:
-                security.conn.close()
-                security.jconn.close()
+    app = create_app({"DATA_DIR": tmp, "TESTING": True, "SMOKE_DATA_DIR": tmp})
+    security = app.extensions["e2ee"]
+    security.register("smoke-user", "smoke@example.test", "Test-password-932!")
+    security.register("desktop-user", "desktop@example.test", "Test-password-932!")
+    with app.app_context():
+        app.config["SMOKE_TOKEN"] = create_token("smoke-user", 1)
+    try:
+        yield app
+    finally:
+        app.extensions["exdiary_ctx"].shutdown()
+
+
+def authenticated_client(app):
+    client = app.test_client()
+    client.set_cookie("exdiary_token", app.config["SMOKE_TOKEN"])
+    return client
+
+
+def account_context(app):
+    return app.test_request_context("/", headers={"Authorization": "Bearer " + app.config["SMOKE_TOKEN"]})
 
 
 def test_app_boots_in_sqlite_mode(sqlite_app):
     assert sqlite_app is not None
     # sqlite 分支应创建 offline.db（重定向到工作区临时目录）
-    db = sqlite_app.config["SMOKE_DATA_DIR"] / "offline.db"
+    db = sqlite_app.config["SMOKE_DATA_DIR"] / "data.db"
     assert db.exists()
+    assert not (db.parent / "offline.db").exists()
 
 
 def test_react_default_entry_and_explicit_offline_scope(sqlite_app, tmp_path):
@@ -70,16 +62,16 @@ def test_react_default_entry_and_explicit_offline_scope(sqlite_app, tmp_path):
     for path in ("/", "/experiments", "/settings", "/analyze", "/analysis/report", "/app/"):
         assert b"React integration entry" in client.get(path).data
     # 通过真实应用装配选择独立离线库，而不是接口自行回退。
-    assert client.get("/api/v1/experiments").status_code == 200
-    assert client.get("/api/v1/settings").status_code == 200
+    assert client.get("/api/v1/experiments").status_code == 401
+    assert client.get("/api/v1/settings").status_code == 401
     client.set_cookie("exdiary_token", "invalid-session", domain="localhost")
     assert client.get("/api/v1/experiments").status_code == 401
-    assert client.get("/api/v1/experiments").status_code == 200
+    assert client.get("/api/v1/experiments").status_code == 401
 
 
 def test_offline_thread_repo_is_sqlite(sqlite_app):
     """无认证请求 → g.thread_repo 应为 SqliteThreadRepository（线程已进 SQLite）。"""
-    with sqlite_app.test_request_context("/"):
+    with account_context(sqlite_app):
         sqlite_app.preprocess_request()
         from flask import g
         assert isinstance(g.thread_repo, SqliteThreadRepository)
@@ -93,7 +85,8 @@ def test_cookie_login_reads_account_chat_state(sqlite_app):
     from flask import g
     from lib.auth import create_token
 
-    token = create_token("desktop-user", 1)
+    with sqlite_app.app_context():
+        token = create_token("desktop-user", 1)
     with sqlite_app.test_request_context("/", headers={"Cookie": f"exdiary_token={token}"}):
         sqlite_app.preprocess_request()
         assert g.user_id == "desktop-user"
@@ -101,7 +94,7 @@ def test_cookie_login_reads_account_chat_state(sqlite_app):
             "history": [{"role": "user", "content": "账号聊天记录"}],
         })
 
-    client = sqlite_app.test_client()
+    client = authenticated_client(sqlite_app)
     client.set_cookie("exdiary_token", token, domain="localhost")
     response = client.get("/api/agent/history")
     assert response.status_code == 200
@@ -109,7 +102,7 @@ def test_cookie_login_reads_account_chat_state(sqlite_app):
 
 
 def test_routes_serve_and_persist(sqlite_app):
-    c = sqlite_app.test_client()
+    c = authenticated_client(sqlite_app)
 
     # 1. 列实验（空库 → 200）
     rv = c.get("/api/v1/experiments")
@@ -148,7 +141,7 @@ def test_routes_serve_and_persist(sqlite_app):
 
 def test_chat_history_search_routes(sqlite_app):
     """搜索与附近上下文接口只返回小窗口，且能跨归档读取。"""
-    with sqlite_app.test_request_context("/"):
+    with account_context(sqlite_app):
         sqlite_app.preprocess_request()
         from flask import g
         g.thread_repo.archive_compressed_history("SES-smoke", 0, [
@@ -156,7 +149,7 @@ def test_chat_history_search_routes(sqlite_app):
              "created_at": "2026-08-20T09:00:00Z"},
         ])
 
-    client = sqlite_app.test_client()
+    client = authenticated_client(sqlite_app)
     rv = client.get("/api/agent/history/search", query_string={"q": "电池"})
     assert rv.status_code == 200
     match = rv.get_json()["matches"][0]
@@ -176,7 +169,7 @@ def test_chat_history_search_routes(sqlite_app):
 
 
 def test_manual_edit_rejects_stale_revision(sqlite_app):
-    client = sqlite_app.test_client()
+    client = authenticated_client(sqlite_app)
     exp_id = "EXP-2026-REVISION"
     first = {
         "id": exp_id, "title": "版本测试", "date": "2026-08-21",
@@ -192,7 +185,7 @@ def test_manual_edit_rejects_stale_revision(sqlite_app):
 
 
 def test_attachment_upload_link_download_and_remove(sqlite_app):
-    client = sqlite_app.test_client()
+    client = authenticated_client(sqlite_app)
     exp_id = "EXP-2026-ATT"
     rv = client.post(f"/experiments/{exp_id}/save-json", json={
         "id": exp_id, "title": "附件测试", "date": "2026-08-21",
@@ -223,7 +216,7 @@ def test_attachment_upload_link_download_and_remove(sqlite_app):
 
 def test_chat_attachment_can_be_managed_by_agent(sqlite_app):
     """聊天上传不自动关联实验；Agent 工具可搜索、读取并在语义确认后关联。"""
-    client = sqlite_app.test_client()
+    client = authenticated_client(sqlite_app)
     exp_id = "EXP-2026-CHAT-ATT"
     client.post(f"/experiments/{exp_id}/save-json", json={
         "id": exp_id, "title": "聊天附件测试", "date": "2026-08-21",
@@ -236,7 +229,7 @@ def test_chat_attachment_can_be_managed_by_agent(sqlite_app):
     attachment = rv.get_json()["attachment"]
     assert client.get(f"/api/experiments/{exp_id}/attachments").get_json()["attachments"] == []
 
-    with sqlite_app.test_request_context("/"):
+    with account_context(sqlite_app):
         sqlite_app.preprocess_request()
         from flask import g
         from lib.agent_v2 import ToolExecutor
@@ -277,7 +270,7 @@ def test_xlsx_attachment_has_native_preview(sqlite_app):
     raw = BytesIO()
     book.save(raw)
 
-    client = sqlite_app.test_client()
+    client = authenticated_client(sqlite_app)
     rv = client.post("/api/agent/attachments", data={
         "file": (BytesIO(raw.getvalue()), "native-preview.xlsx"),
     }, content_type="multipart/form-data")
@@ -313,14 +306,14 @@ def test_read_xlsx_attachment_truncates_each_sheet_independently(sqlite_app):
     raw = BytesIO()
     book.save(raw)
 
-    client = sqlite_app.test_client()
+    client = authenticated_client(sqlite_app)
     uploaded = client.post("/api/agent/attachments", data={
         "file": (BytesIO(raw.getvalue()), "multi-sheet.xlsx"),
     }, content_type="multipart/form-data")
     assert uploaded.status_code == 200, uploaded.get_json()
     sha = uploaded.get_json()["attachment"]["sha256"]
 
-    with sqlite_app.test_request_context("/"):
+    with account_context(sqlite_app):
         sqlite_app.preprocess_request()
         from flask import g
         from lib.agent_v2 import ToolExecutor
@@ -348,7 +341,7 @@ def test_read_image_attachment_uses_current_model_vision(sqlite_app):
             self.calls.append((content, mime, name))
             return "画面是一张黄色薄膜的实验照片。"
 
-    client = sqlite_app.test_client()
+    client = authenticated_client(sqlite_app)
     uploaded = client.post("/api/agent/attachments", data={
         "file": (BytesIO(b"not-used-by-the-test-model"), "film.jpg"),
     }, content_type="multipart/form-data")
@@ -360,7 +353,7 @@ def test_read_image_attachment_uses_current_model_vision(sqlite_app):
         child=SimpleNamespace(agent_role=None, exp_id=None),
     )
 
-    with sqlite_app.test_request_context("/"):
+    with account_context(sqlite_app):
         sqlite_app.preprocess_request()
         from flask import g
         from lib.agent_v2 import ToolExecutor
@@ -377,7 +370,7 @@ def test_read_image_attachment_uses_current_model_vision(sqlite_app):
 def test_data_persisted_to_sqlite(sqlite_app):
     """验证写入确实进了 offline.db（而非 YAML）。"""
     tmp = sqlite_app.config["SMOKE_DATA_DIR"]
-    conn = sqlite3.connect(str(tmp / "offline.db"))
+    conn = sqlite3.connect(str(tmp / "data.db"))
     n = conn.execute("SELECT COUNT(*) FROM experiments").fetchone()[0]
     t = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")]
     conn.close()

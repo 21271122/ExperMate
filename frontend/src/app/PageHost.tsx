@@ -1,3 +1,4 @@
+import { services } from '../runtime/services';
 import { useLayoutEffect, useState } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { ExperimentList } from '../features/experiments/ExperimentList';
@@ -33,8 +34,8 @@ export function PageHost() {
       show: (path: string, container: Element) => flushSync(() => setPage({ path, container, key: ++key })),
       clear: () => flushSync(() => setPage(null)),
     };
-    Object.assign(window, { ExperMatePages: pages });
-    return () => { delete (window as unknown as { ExperMatePages?: unknown }).ExperMatePages; };
+    Object.assign(services, { ExperMatePages: pages });
+    return () => { delete services.ExperMatePages; };
   }, []);
   return page && createPortal(<Page key={page.key} path={page.path} />, page.container);
 }

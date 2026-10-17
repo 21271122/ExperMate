@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { invoke } from '../../legacy/invoke';
-import { requestJson } from './api';
+import { services } from '../../runtime/services';
+import { requestJson } from '../../shared/api';
 import { DateGroup, Record } from './Record';
 import { ToolPanel } from './ToolPanel';
 import { ListSearchPopup } from './ListSearchPopup';
 import { createPortal } from 'react-dom';
 import { emptyData, isArchived, matches, normalizeDate, sortExperiments, statuses, type Experiment, type Filters, type ListData } from './model';
+import listStyles from '../../styles/experiments.css?inline';
 
 function savedFilters(path: string): Filters {
   let saved: Partial<Filters> = {};
@@ -62,26 +63,15 @@ export function ExperimentList({ path }: { path: string }) {
     const next = old.includes(id) ? old.filter(item => item !== id) : [...old, id];
     selectedRef.current = next; setSelected(next); return true;
   }
-  function goCompare() { if (selectedRef.current.length >= 2) invoke('PanelManager.navigate', '/compare?ids=' + selectedRef.current.join(',')); }
-  useEffect(() => { invoke('onCompareBarUpdate', selected.length); }, [selected]);
+  function goCompare() { if (selectedRef.current.length >= 2) services.PanelManager?.navigate('/compare?ids=' + selectedRef.current.join(',')); }
   useEffect(() => {
     // 移动端工具栏继续使用原接口，状态和行渲染由 React 管理。
-    const api = { toggle, isSelected: (id: string) => selectedRef.current.includes(id), getCount: () => selectedRef.current.length,
-      exit: () => activatePanel(''), go: goCompare };
     const enter = () => { activatePanel('compare'); setMobileCompare(innerWidth <= 720); };
-    const filter = () => {
-      const active = document.querySelector<HTMLElement>('#status-filters .active');
-      setFilters({ query: (document.getElementById('search-input') as HTMLInputElement)?.value || '',
-        status: active?.dataset.archive === 'true' ? 'archived' : active?.dataset.status || '',
-        tags: [...document.querySelectorAll<HTMLElement>('#tag-filters .active')].map(el => el.dataset.tag || ''),
-        dateFrom: (document.getElementById('date-from') as HTMLInputElement)?.value || '',
-        dateTo: (document.getElementById('date-to') as HTMLInputElement)?.value || '' });
-    };
     const list = { openPanelPopup: (name: string) => { setPopup(name); activatePanel(name); }, openSearchPopup: () => setSearchPopup(true),
       getViewState: () => { const { query: _query, ...saved } = filtersRef.current; return saved; } };
-    Object.assign(window, { compareApi: api, enterCompareMode: enter, filterExperiments: filter, ExperMateList: list });
+    Object.assign(services, { enterCompareMode: enter, ExperMateList: list });
     return () => {
-      for (const name of ['compareApi', 'enterCompareMode', 'filterExperiments', 'ExperMateList']) delete (window as unknown as { [name: string]: unknown })[name];
+      delete services.enterCompareMode; delete services.ExperMateList;
     };
   }, []);
   useEffect(() => {
@@ -178,10 +168,10 @@ export function ExperimentList({ path }: { path: string }) {
   const record = (exp: Experiment, isOther = false) => <Record key={exp.id} exp={exp} cards={cards} pinned={!isOther && pinIds.includes(exp.id)} other={isOther}
     selected={selected.includes(exp.id)} category={category} categories={Object.keys(data.collections).filter(name => data.collections[name].includes(exp.id))}
     menu={menu} setMenu={setMenu} pin={() => { if (!pending) pin(exp); }} categorize={() => assign(exp)}
-    open={() => { if (compare) { if (!toggle(exp.id)) alert('Max 4 experiments'); } else invoke('PanelManager.navigate', '/experiments/' + encodeURIComponent(exp.id)); }} />;
+    open={() => { if (compare) { if (!toggle(exp.id)) alert('Max 4 experiments'); } else services.PanelManager?.navigate('/experiments/' + encodeURIComponent(exp.id)); }} />;
   const categories = ['__all__', ...Object.keys(data.collections)];
 
-  return <><link rel="stylesheet" href="/static/css/experiments.css" />
+  return <><style>{listStyles}</style>
     {searchPopup && <ListSearchPopup filters={filters} tags={tags} change={setFilters} close={() => setSearchPopup(false)} />}
     {compare && mobileCompare && document.getElementById('page-toolbar') && createPortal(<div id="compare-bar" style={{ position:'sticky',top:0,zIndex:50,background:'var(--yellow)',borderBottom:'4px solid var(--black)',padding:'0.45rem 0.9rem',display:'flex',alignItems:'center',gap:'0.6rem',fontWeight:900,fontSize:'0.8rem',letterSpacing:'0.5px' }}>
       <span style={{flex:1}}>{selected.length < 2 ? `已选择 ${selected.length} / 需 2` : `已选择 ${selected.length} experiments`}</span><button type="button" className="outline" disabled={selected.length<2} onClick={goCompare}>Start Compare</button><button type="button" className="outline secondary" onClick={()=>activatePanel('')}>取消</button></div>, document.getElementById('page-toolbar')!)}

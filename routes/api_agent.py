@@ -3,25 +3,70 @@ import queue
 import re
 import threading
 import uuid
-from flask import Blueprint, request, jsonify, Response, g, stream_with_context
+from functools import wraps
+
+from flask import Blueprint, Response, current_app, g, jsonify, request, stream_with_context
+
 from lib.agent_factory import get_or_create_agent, load_parent_runtime_state
-from routes.api_experiment import api_parse_confirm
 from routes.api_attachment import store_uploaded_attachment
+from routes.api_experiment import api_parse_confirm
 
 api_agent_bp = Blueprint("api_agent", __name__)
 
 
-# 同一账号可在桌面 WebView 与浏览器中同时打开。运行状态不能再依赖任一
-# 窗口各自的 sessionStorage，因此用进程内事件总线把流式事件分发给全部窗口。
-_event_lock = threading.RLock()
-_event_subscribers = {}
-_run_locks = {}
-_active_runs = {}
+# 事件与互斥锁属于当前服务实例，不跨应用实例共享。
+class AgentRuntime:
+    def __init__(self):
+        self.lock = threading.RLock()
+        self.subscribers, self.run_locks, self.active_runs = {}, {}, {}
+
+
+def _runtime():
+    return current_app.extensions.setdefault("agent_runtime", AgentRuntime())
+
+
+def _serialized_account_run(function):
+    """同一账号的主/子对话串行修改会话；流式响应关闭时释放。"""
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        from flask import make_response
+        lock = _run_lock(g.user_id)
+        if not lock.acquire(blocking=False):
+            return jsonify(ok=False, error="另一窗口正在生成回复"), 409
+        released = False
+
+        def release():
+            nonlocal released
+            if not released:
+                released = True
+                lock.release()
+
+        try:
+            response = make_response(function(*args, **kwargs))
+            if response.is_streamed:
+                original = response.response
+
+                def generate():
+                    try:
+                        yield from original
+                    finally:
+                        original.close()
+                        release()
+                response.response = generate()
+                response.call_on_close(release)
+            else:
+                release()
+            return response
+        except BaseException:
+            release()
+            raise
+    return wrapped
+
 _HISTORY_PAGE_SIZE = 50
 
 
 def _channel_key():
-    return g.user_id or "__offline__"
+    return g.user_id
 
 
 def _context_compression_options() -> dict:
@@ -33,41 +78,9 @@ def _context_compression_options() -> dict:
 
 
 def _agent_data_freshness_context() -> str:
-    """每个顶层用户回合主动拉取一次，并把真实同步结果交给 Agent。"""
-    if not g.user_id:
-        return (
-            "[数据同步状态]\n当前为离线数据模式，未连接账号同步。"
-            "本机数据库是本轮唯一可读取的数据来源。"
-        )
-    gateway = getattr(g, "_sync_gateway", None)
-    if gateway is None:
-        return (
-            "[数据同步状态]\n账号同步尚未就绪，本轮无法确认其他设备的最新改动。"
-            "本机对话中的旧实验陈述可能过期；涉及读取、判断、修改或删除时必须用工具读取当前数据。"
-        )
-    gateway.pull()
-    status = gateway.last_pull_status()
-    if not status.get("ok"):
-        return (
-            "[数据同步状态]\n本轮开始前远端同步失败，无法确认其他设备的最新改动。"
-            "本机对话中的旧实验陈述可能过期；涉及读取、判断、修改或删除时必须用工具读取当前数据。"
-        )
-    changes = status.get("changed") or []
-    rendered = []
-    for change in changes[:8]:
-        entity_type = str(change.get("type") or "资源")
-        entity_id = str(change.get("id") or "")
-        revision = change.get("revision")
-        suffix = f" rev {revision}" if revision is not None else ""
-        rendered.append(f"{entity_type}:{entity_id}{suffix}")
-    change_text = "、".join(rendered) if rendered else "无外部数据变更"
-    if len(changes) > len(rendered):
-        change_text += f"，另有 {len(changes) - len(rendered)} 项"
     return (
-        "[数据同步状态]\n"
-        f"本轮开始前远端同步成功（{status.get('pulled_at') or '时间未知'}）；"
-        f"本次收到 {len(changes)} 项变化：{change_text}。\n"
-        "本机对话中的旧实验陈述不保证仍正确；涉及读取、判断、修改或删除时必须调用工具读取当前数据。"
+        "[服务端数据状态]\n当前账号的数据由服务端统一管理，所有客户端共享同一仓储。"
+        "对话中的旧陈述可能过期，读取或修改实验时必须用工具读取服务端最新数据与 revision。"
     )
 
 
@@ -109,8 +122,8 @@ def api_agent_attachment_upload():
 
 
 def _run_lock(channel):
-    with _event_lock:
-        return _run_locks.setdefault(channel, threading.Lock())
+    with _runtime().lock:
+        return _runtime().run_locks.setdefault(channel, threading.Lock())
 
 
 def _history_page(state, before=None, limit=_HISTORY_PAGE_SIZE):
@@ -154,31 +167,31 @@ def _state_with_latest_history(state):
 
 def _subscribe(channel):
     subscriber = queue.Queue()
-    with _event_lock:
-        _event_subscribers.setdefault(channel, set()).add(subscriber)
-        active = dict(_active_runs.get(channel) or {})
+    with _runtime().lock:
+        _runtime().subscribers.setdefault(channel, set()).add(subscriber)
+        active = dict(_runtime().active_runs.get(channel) or {})
     return subscriber, active
 
 
 def _unsubscribe(channel, subscriber):
-    with _event_lock:
-        subscribers = _event_subscribers.get(channel)
+    with _runtime().lock:
+        subscribers = _runtime().subscribers.get(channel)
         if not subscribers:
             return
         subscribers.discard(subscriber)
         if not subscribers:
-            _event_subscribers.pop(channel, None)
+            _runtime().subscribers.pop(channel, None)
 
 
 def _publish(channel, event):
-    with _event_lock:
-        active = _active_runs.get(channel)
+    with _runtime().lock:
+        active = _runtime().active_runs.get(channel)
         if active and active.get("request_id") == event.get("request_id"):
             if event.get("event") == "text":
                 active["text"] += event.get("content", "")
             elif event.get("event") in ("done", "error"):
-                _active_runs.pop(channel, None)
-        subscribers = list(_event_subscribers.get(channel, ()))
+                _runtime().active_runs.pop(channel, None)
+        subscribers = list(_runtime().subscribers.get(channel, ()))
     for subscriber in subscribers:
         subscriber.put(event)
 
@@ -192,7 +205,7 @@ def publish_named_resource_change_for_user(user_id, resource, action, origin_id=
         "origin_id": origin_id,
     }
     event.update({key: value for key, value in details.items() if value is not None})
-    _publish(user_id or "__offline__", event)
+    _publish(user_id, event)
 
 
 def publish_resource_change_for_user(user_id, exp_id, action, origin_id=""):
@@ -330,6 +343,7 @@ def api_agent_events():
 
 
 @api_agent_bp.route("/start", methods=["POST"])
+@_serialized_account_run
 def api_agent_start():
     llm = g.get_agent_llm()
     if not llm:
@@ -532,7 +546,6 @@ def api_agent_message():
             preview["references"] = refs
             g.exp_repo.save(preview)
             g.experiment_svc.update_referenced_by(preview["id"], refs)
-            g.experiment_svc.move_draft_images(preview["id"])
             publish_named_resource_change("experiment", "created", exp_id=preview["id"])
             return jsonify({"ok": True, "type": "saved", "exp_id": preview["id"],
                             **_state_with_latest_history(result.get("state") or agent.state_to_dict()),
@@ -583,8 +596,8 @@ def api_agent_message_stream():
     request_id = uuid.uuid4().hex
     history_before = list(agent.history)
     origin_id = data.get("client_id") or ""
-    with _event_lock:
-        _active_runs[channel] = {
+    with _runtime().lock:
+        _runtime().active_runs[channel] = {
             "request_id": request_id,
             "origin_id": origin_id,
             "message": user_message,
@@ -622,7 +635,6 @@ def api_agent_message_stream():
                         preview["references"] = refs
                         g.exp_repo.save(preview)
                         g.experiment_svc.update_referenced_by(preview["id"], refs)
-                        g.experiment_svc.move_draft_images(preview["id"])
                         event["exp_id"] = preview["id"]
                         event["type"] = "saved"
                         publish_named_resource_change_for_user(

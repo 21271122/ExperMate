@@ -6,16 +6,13 @@ from typing import Any
 from lib.repositories.base import AbstractFavoritesRepository
 from lib.repositories.sqlite_common import UserScopeMixin
 
-
 DEFAULT_COLLECTION = "默认收藏夹"
 
 
 class SqliteFavoritesRepository(AbstractFavoritesRepository, UserScopeMixin):
-    def __init__(self, db: sqlite3.Connection, uid_provider=None, on_dirty=None) -> None:
-        """on_dirty: 收藏变更后同步标记回调 (entity_id, tombstone)。"""
+    def __init__(self, db: sqlite3.Connection, uid_provider=None) -> None:
         UserScopeMixin.__init__(self, uid_provider)
         self.db = db
-        self._on_dirty = on_dirty
         self.db.row_factory = sqlite3.Row
         self._create_tables()
 
@@ -63,9 +60,6 @@ class SqliteFavoritesRepository(AbstractFavoritesRepository, UserScopeMixin):
         except sqlite3.OperationalError:
             pass
 
-    def _mark_dirty(self) -> None:
-        if self._on_dirty is not None:
-            self._on_dirty("_snapshot", False)
 
     def _collections_from_favorites(self) -> list[str]:
         rows = self.db.execute(
@@ -123,7 +117,6 @@ class SqliteFavoritesRepository(AbstractFavoritesRepository, UserScopeMixin):
                 "DELETE FROM favorites WHERE exp_id = ? AND user_id = ? AND pin_order IS NOT NULL",
                 (exp_id, self._uid()),
             )
-            self._mark_dirty()
             return {"ok": True, "pinned": False}
 
         count = self.db.execute(
@@ -141,7 +134,6 @@ class SqliteFavoritesRepository(AbstractFavoritesRepository, UserScopeMixin):
             "INSERT INTO favorites (user_id, exp_id, collection, pin_order) VALUES (?, ?, '', ?)",
             (self._uid(), exp_id, (max_order or 0) + 1),
         )
-        self._mark_dirty()
         return {"ok": True, "pinned": True}
 
     def set_pin(self, exp_id: str, pinned: bool) -> dict[str, Any]:
@@ -180,14 +172,12 @@ class SqliteFavoritesRepository(AbstractFavoritesRepository, UserScopeMixin):
                 """,
                 (exp_id, self._uid(), collection),
             )
-            self._mark_dirty()
             return {"ok": True, "favorited": False}
 
         self.db.execute(
             "INSERT INTO favorites (user_id, exp_id, collection) VALUES (?, ?, ?)",
             (self._uid(), exp_id, collection),
         )
-        self._mark_dirty()
         return {"ok": True, "favorited": True}
 
     def is_favorited(self, exp_id: str, collection: str = DEFAULT_COLLECTION) -> bool:
@@ -267,7 +257,6 @@ class SqliteFavoritesRepository(AbstractFavoritesRepository, UserScopeMixin):
                 """,
                 (self._uid(), collection, exp_id),
             )
-            self._mark_dirty()
             return {"ok": True, "pinned": False, "collection": collection}
         count = self.db.execute(
             """
@@ -292,7 +281,6 @@ class SqliteFavoritesRepository(AbstractFavoritesRepository, UserScopeMixin):
             """,
             (self._uid(), collection, exp_id, (max_order or 0) + 1),
         )
-        self._mark_dirty()
         return {"ok": True, "pinned": True, "collection": collection}
 
     def get_collections(self) -> dict[str, list[str]]:
@@ -357,7 +345,6 @@ class SqliteFavoritesRepository(AbstractFavoritesRepository, UserScopeMixin):
             """,
             (self._uid(), name, (max_order or 0) + 1),
         )
-        self._mark_dirty()
         return {"ok": True}
 
     def delete_collection(self, name: str) -> dict[str, Any]:
@@ -375,7 +362,6 @@ class SqliteFavoritesRepository(AbstractFavoritesRepository, UserScopeMixin):
             "DELETE FROM favorite_category_pins WHERE collection = ? AND user_id = ?",
             (name, self._uid()),
         )
-        self._mark_dirty()
         return {"ok": True}
 
     def update_collection(
@@ -411,7 +397,6 @@ class SqliteFavoritesRepository(AbstractFavoritesRepository, UserScopeMixin):
                 "UPDATE favorite_collections SET description = ? WHERE user_id = ? AND name = ?",
                 (description.strip(), self._uid(), target),
             )
-        self._mark_dirty()
         return {"ok": True, "name": target}
 
     def reorder_collections(self, names: list[str]) -> dict[str, Any]:
@@ -433,88 +418,4 @@ class SqliteFavoritesRepository(AbstractFavoritesRepository, UserScopeMixin):
                 (order, self._uid(), name),
             )
             order += 1
-        self._mark_dirty()
         return {"ok": True}
-
-    def export_snapshot(self, user_id: str) -> dict[str, Any]:
-        favorite_rows = self.db.execute(
-            "SELECT exp_id, collection, pin_order, created_at FROM favorites WHERE user_id = ?",
-            (user_id,),
-        ).fetchall()
-        collection_rows = self.db.execute(
-            """
-            SELECT name, description, sort_order
-            FROM favorite_collections
-            WHERE user_id = ?
-            ORDER BY sort_order, name
-            """,
-            (user_id,),
-        ).fetchall()
-        category_pin_rows = self.db.execute(
-            """
-            SELECT collection, exp_id, pin_order
-            FROM favorite_category_pins
-            WHERE user_id = ?
-            ORDER BY collection, pin_order
-            """,
-            (user_id,),
-        ).fetchall()
-        return {
-            "favorites": [dict(r) for r in favorite_rows],
-            "collections": [dict(r) for r in collection_rows],
-            "category_pins": [dict(r) for r in category_pin_rows],
-        }
-
-    def import_snapshot(self, data: list[dict] | dict[str, Any], user_id: str) -> None:
-        favorite_rows = data.get("favorites", []) if isinstance(data, dict) else data
-        collection_rows = data.get("collections", []) if isinstance(data, dict) else []
-        category_pin_rows = data.get("category_pins", []) if isinstance(data, dict) else []
-        self.db.execute("BEGIN")
-        try:
-            self.db.execute("DELETE FROM favorites WHERE user_id = ?", (user_id,))
-            self.db.execute("DELETE FROM favorite_collections WHERE user_id = ?", (user_id,))
-            self.db.execute("DELETE FROM favorite_category_pins WHERE user_id = ?", (user_id,))
-            for row in collection_rows:
-                self.db.execute(
-                    """
-                    INSERT INTO favorite_collections (user_id, name, description, sort_order)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (
-                        user_id,
-                        row["name"],
-                        row.get("description", ""),
-                        row.get("sort_order", 0),
-                    ),
-                )
-            for row in favorite_rows:
-                self.db.execute(
-                    """
-                    INSERT INTO favorites (user_id, exp_id, collection, pin_order, created_at)
-                    VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (
-                        user_id,
-                        row["exp_id"],
-                        row.get("collection", DEFAULT_COLLECTION),
-                        row.get("pin_order"),
-                        row.get("created_at", ""),
-                    ),
-                )
-            for row in category_pin_rows:
-                self.db.execute(
-                    """
-                    INSERT INTO favorite_category_pins (user_id, collection, exp_id, pin_order)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (
-                        user_id,
-                        row["collection"],
-                        row["exp_id"],
-                        row.get("pin_order", 0),
-                    ),
-                )
-            self.db.commit()
-        except Exception:
-            self.db.execute("ROLLBACK")
-            raise

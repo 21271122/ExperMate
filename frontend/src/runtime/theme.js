@@ -1,3 +1,4 @@
+import { services } from './services';
 /**
  * theme.js — 深色模式切换（跟随系统 + 手动覆盖）
  *   localStorage 'exdiary_theme': 'dark' | 'light' = 手动偏好；缺失/其他 = 跟随系统
@@ -33,20 +34,7 @@ export function initializeTheme(scope) {
     btn.title = resolvedTheme() === "dark" ? "浅色模式" : "深色模式";
   }
 
-  /* 设置页三态 chips 高亮 */
-  function updateChips() {
-    var box = document.getElementById("theme-options");
-    if (!box) return;
-    var pref = currentPref() || "system";
-    box.querySelectorAll(".filter-chip").forEach(function (c) {
-      c.classList.toggle("active", c.dataset.pref === pref);
-    });
-  }
-
-  function refreshUI() {
-    updateButton();
-    updateChips();
-  }
+  function refreshUI() { updateButton(); }
 
   function setPref(pref) {
     try {
@@ -75,20 +63,15 @@ export function initializeTheme(scope) {
     scope.cleanup(function () { mq.removeListener(changed); });
   }
 
-  /* 设置页 chips：document 级事件委托（SPA 中设置页以 fragment 动态注入，委托对动态元素同样生效） */
-  scope.listen(document, "click", function (e) {
-    if (window.ExperMateReactSettings) return;
-    var chip = e.target.closest && e.target.closest("#theme-options .filter-chip");
-    if (chip && chip.dataset.pref) setPref(chip.dataset.pref);
-  });
-
   if (document.readyState === "loading") scope.listen(document, "DOMContentLoaded", refreshUI);
   else refreshUI();
 
-  window.ExdiaryTheme = {
+  const api = {
     setPref: setPref,
     toggleTheme: toggleTheme,
     resolvedTheme: resolvedTheme,
     updateButton: updateButton
   };
+  services.ExdiaryTheme = api;
+  return api;
 }

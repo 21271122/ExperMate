@@ -1,5 +1,6 @@
+import { CanvasSurface } from './CanvasSurface';
 // 原始 ai-shell/index.html 的 DOM 结构，使用现有 CSS；不得在框架迁移中改版。
-import { invoke } from "../legacy/invoke";
+import { services } from '../runtime/services';
 import { ChatPanel } from "../features/chat/ChatPanel";
 
 export function ShellFrame() {
@@ -10,7 +11,7 @@ export function ShellFrame() {
         <div id={"divider"} />
         <div id={"content-panel"}>
           <div id={"content-header"}>
-            <button id={"content-header-back"} title={"返回上一页"} onClick={() => { invoke("PanelManager.back"); }}>
+            <button id={"content-header-back"} title={"返回上一页"} onClick={() => { services.PanelManager?.back(); }}>
               {"←"}
             </button>
             <span id={"content-header-title"} />
@@ -41,24 +42,12 @@ export function ShellFrame() {
             </a>
           </div>
           <div id={"content-body"}>
-            <div id={"canvas-container"}>
-              <canvas id={"de-stijl-canvas"} />
-              <div id={"agent-tip"}>
-                <div className={"nb-head"}>
-                  <span>
-                    {"小同门实验笔记"}
-                  </span>
-                  <span className={"nb-date"} id={"nb-date"} />
-                </div>
-                <div id={"nb-body"} />
-              </div>
-              <div id={"hover-tip"} />
-            </div>
+            <CanvasSurface />
             <div id={"fragment-mount"} style={{"display": "none"}} />
           </div>
         </div>
       </div>
-      <button id={"chat-float-btn"} title={"Open Chat"} onClick={() => { invoke("PanelManager.expandChat"); }}>
+      <button id={"chat-float-btn"} title={"Open Chat"} onClick={() => { services.PanelManager?.expandChat(); }}>
         {"↑"}
       </button>
     </div>

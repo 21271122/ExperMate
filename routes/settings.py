@@ -27,8 +27,15 @@ def settings_api_context(config):
     keys = ("LLM_AGENT_PROVIDER", "LLM_AGENT_BASE_URL", "LLM_AGENT_MODEL", "LLM_REASONING_EFFORT",
             "CONTEXT_COMPRESSION_TRIGGER_TOKENS", "CONTEXT_COMPRESSION_CHUNK_TOKENS",
             "LLM_ANALYZE_PROVIDER", "LLM_ANALYZE_BASE_URL", "LLM_ANALYZE_MODEL", "ANALYSIS_TIMEOUT_SECONDS",
-            "DEEPSEEK_MODEL", "DEEPSEEK_ANALYZE_MODEL", "PORT", "HOST", "GUI")
-    return {"values": {key: config.get(key, "") for key in keys}, **settings_template_context(config)}
+            "DEEPSEEK_MODEL", "DEEPSEEK_ANALYZE_MODEL")
+    context = settings_template_context(config)
+    can_configure = bool(getattr(g, "is_admin", False))
+    if not can_configure:
+        context.update(masked_agent_key="", masked_analyze_key="")
+    values = {key: config.get(key, "") for key in keys}
+    if not can_configure:
+        values.update(LLM_AGENT_BASE_URL="", LLM_ANALYZE_BASE_URL="")
+    return {"values": values, "can_configure": can_configure, **context}
 
 
 def _submitted_secret(name: str) -> str:
@@ -66,6 +73,8 @@ def _context_compression_settings() -> tuple[int, int]:
 
 @settings_bp.route("/settings", methods=["POST"])
 def settings_save():
+    if not getattr(g, "is_admin", False):
+        return jsonify(ok=False, error="模型配置仅限服务端管理员修改"), 403
     try:
         compression_trigger, compression_chunk = _context_compression_settings()
     except ValueError as exc:
@@ -83,11 +92,8 @@ def settings_save():
         "LLM_ANALYZE_BASE_URL": request.form.get("LLM_ANALYZE_BASE_URL", ""),
         "LLM_ANALYZE_MODEL": request.form.get("LLM_ANALYZE_MODEL", ""),
         "ANALYSIS_TIMEOUT_SECONDS": _analysis_timeout_seconds(),
-        "PORT": request.form.get("PORT", "5000"),
-        "HOST": request.form.get("HOST", "0.0.0.0"),
-        "GUI": request.form.get("GUI", "false"),
     }
     # 经注入的 ConfigManager 持久化（避免反向 import app）
     g.config_manager.save(data)
     return jsonify(ok=True, data=settings_api_context(g.config),
-                   message="模型配置、思考强度、会话整理与分析时限已保存；后续主 Agent 对话会使用新设置。端口和 GUI 修改需重启应用生效。")
+                   message="服务端模型配置已保存，后续请求使用新设置。")

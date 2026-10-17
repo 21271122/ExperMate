@@ -22,7 +22,7 @@ test('子对话流式结束后按服务端历史对齐、不重复消息，生�
   stream.enqueue(event({ event: 'done', state: { history: [{ role: 'user', content: '<b>change</b>' }, { role: 'assistant', content: '已修改' }], turn_count: 1, modified_values: { title: 'updated' } } })); stream.close();
   await waitFor(() => expect(screen.getByRole('button', { name: '发送' })).toBeEnabled());
   expect(input).toHaveValue('next draft'); expect(screen.getAllByText('已修改')).toHaveLength(1); expect(document.querySelectorAll('#child-msgs b')).toHaveLength(0);
-  expect(JSON.parse(sessionStorage.getItem('exdiary_child_E1')!).turn_count).toBe(1);
+  expect(sessionStorage.getItem('exdiary_child_E1')).toBeNull();
   await user.click(screen.getByRole('button', { name: '关闭' })); expect(updated).toHaveBeenCalledOnce(); expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 

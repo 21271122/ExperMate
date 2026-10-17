@@ -34,7 +34,7 @@ def api_music_library_add():
         return jsonify({"ok": False, "error": "该附件不是支持的音频文件"}), 400
     track = g.attachment_store.add_music_track(sha256, str(data.get("title") or ""))
     if not track:
-        return jsonify({"ok": False, "error": "附件内容尚未下载到本机"}), 409
+        return jsonify({"ok": False, "error": "服务端未找到附件内容"}), 409
     return jsonify({"ok": True, "track": {
         "id": f"attachment:{track['sha256']}",
         "title": track.get("title") or track.get("name") or "未命名音频",

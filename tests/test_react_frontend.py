@@ -65,7 +65,7 @@ def react_app(tmp_path, monkeypatch):
         g.attachment_store = attachments
         g.favorites_repo = favorites
         g.experiment_svc = experiment_service
-        g.frontend_offline = bool(app.config.get("TEST_FRONTEND_OFFLINE")) and not request.cookies.get("exdiary_token") and not g.user_id
+        g.is_admin = g.user_id == "alice"
         g.analysis_repo = analyses
         g.template_svc = template_service
         g.config = config
@@ -77,8 +77,6 @@ def react_app(tmp_path, monkeypatch):
         open_dek=lambda account, password: b"test-only-dek",
         snapshot=lambda account: SimpleNamespace(account_epoch=1),
     )
-    monkeypatch.setattr("lib.e2ee.flask_setup.credstore.set_dek", lambda *args: None)
-    monkeypatch.setattr("lib.e2ee.flask_setup.set_cached_dek", lambda *args: None)
     app.register_blueprint(_make_auth_blueprint(SimpleNamespace(svc=svc)))
     app.register_blueprint(api_v1_bp, url_prefix="/api/v1")
     app.register_blueprint(experiment_bp, url_prefix="/experiments")
@@ -122,7 +120,7 @@ def test_session_verification_clears_expired_cookie_before_offline_page_load(rea
     response = client.get("/api/e2ee/me")
     assert response.status_code == 401
     assert "Max-Age=0" in response.headers["Set-Cookie"]
-    assert client.get("/api/v1/settings").status_code == 200
+    assert client.get("/api/v1/settings").status_code == 401
 
 
 @pytest.mark.parametrize("path", ["/experiments", "/experiment-list", "/experiments/A-00", "/attachments/unknown",
@@ -235,7 +233,7 @@ def test_react_routes_and_missing_assets(react_app, tmp_path):
         assert client.get(path).status_code == 404
 
 
-def test_obsolete_frontend_is_retired_but_styles_audio_and_print_remain(react_app):
+def test_obsolete_frontend_is_retired_but_audio_and_print_remain(react_app):
     from routes.dashboard import dashboard_bp
 
     react_app.register_blueprint(dashboard_bp)
@@ -243,10 +241,11 @@ def test_obsolete_frontend_is_retired_but_styles_audio_and_print_remain(react_ap
     assert client.get("/ai-shell/").status_code == 308
     assert client.get("/ai-shell/").headers["Location"] == "/"
     for path in ("/_fragment/experiments", "/_fragment/settings", "/ai-shell/static/js/agent.js",
-                 "/ai-shell/static/js/panel.js", "/static/js/edit-mode.js", "/static/js/attachment-viewer.js"):
+                 "/ai-shell/static/js/panel.js", "/static/js/edit-mode.js", "/static/js/attachment-viewer.js",
+                 "/ai-shell/static/css/shell.css", "/static/css/experiments.css"):
         assert client.get(path).status_code == 404
-    for path in ("/ai-shell/static/css/shell.css", "/static/css/experiments.css",
-                 "/static/css/experiment-detail.css", "/ai-shell/static/audio/uisfx/zen-01-general.mp3"):
+    for path in ("/static/vendor/marked/marked.min.js", "/static/img/favicon.png",
+                 "/ai-shell/static/audio/uisfx/zen-01-general.mp3"):
         assert client.get(path).status_code == 200
     login(client)
     assert client.get("/experiments/A-00/print").status_code == 200
@@ -355,9 +354,9 @@ def test_explicit_offline_scope_remains_separate_from_accounts_and_rejects_inval
         react_app.preprocess_request()
         g.exp_repo.save({"id": "OFF-1", "title": "Offline fixture"}, user_id="")
     client = react_app.test_client()
-    assert [item["id"] for item in client.get("/api/v1/experiment-list").json["data"]["experiments"]] == ["OFF-1"]
-    assert client.get("/api/v1/experiments/A-00").status_code == 404
-    assert client.get("/api/v1/settings").status_code == 200
+    assert client.get("/api/v1/experiment-list").status_code == 401
+    assert client.get("/api/v1/experiments/A-00").status_code == 401
+    assert client.get("/api/v1/settings").status_code == 401
     login(client)
     assert client.get("/api/v1/experiments/OFF-1").status_code == 404
     assert all(item["id"].startswith("A-") for item in client.get("/api/v1/experiment-list").json["data"]["experiments"])

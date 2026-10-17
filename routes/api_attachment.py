@@ -36,7 +36,6 @@ def _display_attachment(link: dict) -> dict:
         **link,
         "size": int(link.get("size") or meta.get("size") or 0),
         "mime": link.get("mime") or meta.get("mime") or "",
-        "sync_state": meta.get("sync_state", "pending"),
         "has_content": bool(meta.get("has_content")),
         "url": f"/api/attachments/{link['sha256']}",
     }
@@ -165,7 +164,7 @@ def api_attachment_preview(sha256: str):
     content = g.attachment_store.get(sha256)
     meta = g.attachment_store.meta(sha256)
     if content is None or meta is None:
-        return jsonify({"ok": False, "error": "附件尚未下载到本机"}), 404
+        return jsonify({"ok": False, "error": "服务端未找到附件内容"}), 404
     name = meta.get("name") or sha256
     mime = (meta.get("mime") or "").lower()
     suffix = Path(name).suffix.lower()

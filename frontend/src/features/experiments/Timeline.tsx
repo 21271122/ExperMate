@@ -1,5 +1,5 @@
 import { usePageData } from '../../app/usePageData';
-import { invoke } from '../../legacy/invoke';
+import { services } from '../../runtime/services';
 import { statuses, type Experiment } from './model';
 
 export function Timeline() {
@@ -10,7 +10,7 @@ export function Timeline() {
     {error ? <div className="flash flash-error" role="alert">{error}</div> : !data ? <div role="status">加载中…</div> : data.length ? <div style={{ position: 'relative', padding: '1rem 0', marginLeft: '1rem' }}>
       <div style={{ position: 'absolute', left: 14, top: 0, bottom: 0, width: 8, background: 'var(--black)' }} />
       {data.map(exp => <div key={exp.id} style={{ position: 'relative', paddingLeft: 50, paddingBottom: '2rem', cursor: 'pointer', transition: 'transform 0.1s' }}
-        onClick={() => invoke('PanelManager.navigate', '/experiments/' + encodeURIComponent(exp.id))} onMouseEnter={e => { e.currentTarget.style.transform = 'translateX(4px)'; }} onMouseLeave={e => { e.currentTarget.style.transform = ''; }}>
+        onClick={() => services.PanelManager?.navigate('/experiments/' + encodeURIComponent(exp.id))} onMouseEnter={e => { e.currentTarget.style.transform = 'translateX(4px)'; }} onMouseLeave={e => { e.currentTarget.style.transform = ''; }}>
         <div style={{ position: 'absolute', left: 6, top: 6, width: 15.3, height: 12, border: '3px solid var(--black)', zIndex: 1, background: `var(--${colors[exp.status || ''] || 'off-white'})` }} />
         <div style={{ border: '4px solid var(--black)', background: 'var(--white)', padding: '0.8rem 1rem', boxShadow: '6px 6px 0px var(--shadow-color)', transition: 'box-shadow 0.15s' }}
           onMouseEnter={e => { e.currentTarget.style.boxShadow = '10px 10px 0px var(--shadow-color)'; }} onMouseLeave={e => { e.currentTarget.style.boxShadow = '6px 6px 0px var(--shadow-color)'; }}>

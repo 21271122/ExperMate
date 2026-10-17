@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { invoke } from '../../legacy/invoke';
-import { requestJson } from './api';
+import { services } from '../../runtime/services';
+import { requestJson } from '../../shared/api';
 import type { Attachment } from './detail-model';
 
 const isImage = (item: Attachment) => item.mime?.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp)$/i.test(item.name || '');
@@ -23,7 +23,7 @@ function AttachmentImage({ item }: { item: Attachment }) {
   }, [item.url]);
   return error ? <>{error}</> : <img src={src || undefined} alt={item.title || item.caption || item.name || '附件图片'}
     style={{ display: 'block', maxWidth: '100%', maxHeight: 340, objectFit: 'contain', border: '2px solid var(--black)', marginTop: '0.5rem', cursor: 'zoom-in' }}
-    onClick={() => invoke('AttachmentViewer.open', item)} />;
+    onClick={() => services.AttachmentViewer?.open(item)} />;
 }
 
 export function DetailAttachments({ expId, revision, locked, onBusy, onConflict, onChanged }: {
@@ -77,7 +77,7 @@ export function DetailAttachments({ expId, revision, locked, onBusy, onConflict,
     if (!confirm('仅从当前实验移除此附件？附件文件不会立即删除。')) return;
     void operation(async () => {
       const result = await requestJson(`${url}/${encodeURIComponent(item.sha256)}?expected_revision=${currentRevision.current}`, { method: 'DELETE', signal: controller.current.signal });
-      updateRevision(result.revision); invoke('ExdiarySound.play', 'delete'); await load();
+      updateRevision(result.revision); services.ExdiarySound?.play('delete'); await load();
     });
   }
   return <details className={`section-group${locked ? ' edit-locked' : ''}`} id="attachment-section" data-edit-lock aria-disabled={locked} inert={locked} open>
@@ -88,12 +88,12 @@ export function DetailAttachments({ expId, revision, locked, onBusy, onConflict,
         <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{item.title || item.caption || item.name || item.sha256}</span>
         <span style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexShrink: 0 }}>{['下载', '移除'].map((label, i) => <button key={label} type="button" className={`outline${i ? ' danger' : ''}`}
           style={{ fontSize: '0.7rem', padding: '0.15rem 0.45rem' }} disabled={busy} onClick={event => {
-            event.preventDefault(); event.stopPropagation(); if (i) remove(item); else void Promise.resolve(invoke('AttachmentViewer.download', item)).catch(error => setStatus(error.message));
+            event.preventDefault(); event.stopPropagation(); if (i) remove(item); else void Promise.resolve(services.AttachmentViewer?.download(item)).catch(error => setStatus(error.message));
           }}>{label}</button>)}</span></summary>
       <div style={{ display: 'flex', gap: '0.55rem', alignItems: 'center', flexWrap: 'wrap', paddingTop: '0.55rem' }}><div style={{ flex: 1, minWidth: 180 }}>
-        <small style={{ display: 'block', opacity: 0.7 }}>{formatSize(item.size || 0)} · {typeLabel(item)} · {item.sync_state === 'synced' ? '已同步' : '待同步'}</small>
+        <small style={{ display: 'block', opacity: 0.7 }}>{formatSize(item.size || 0)} · {typeLabel(item)} · {item.has_content ? '已保存到服务端' : '附件内容不可用'}</small>
         {item.description && <small style={{ display: 'block', marginTop: '0.3rem' }}>{item.description}</small>}
-        {isImage(item) ? <AttachmentImage item={item} /> : <button type="button" style={{ fontWeight: 700, color: 'var(--black)', padding: 0, border: 0, background: 'none', textDecoration: 'underline', cursor: 'pointer', marginTop: '0.35rem' }} onClick={() => invoke('AttachmentViewer.open', item)}>{item.name || item.sha256}</button>}
+        {isImage(item) ? <AttachmentImage item={item} /> : <button type="button" style={{ fontWeight: 700, color: 'var(--black)', padding: 0, border: 0, background: 'none', textDecoration: 'underline', cursor: 'pointer', marginTop: '0.35rem' }} onClick={() => services.AttachmentViewer?.open(item)}>{item.name || item.sha256}</button>}
       </div></div></details>)}</div>
     <form id="attachment-upload-form" style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }} onSubmit={upload}>
       <input ref={input} id="attachment-file" type="file" multiple disabled={busy} accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.pdf,.csv,.txt,.xlsx,image/*,application/pdf,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style={{ maxWidth: '100%' }}
@@ -102,6 +102,6 @@ export function DetailAttachments({ expId, revision, locked, onBusy, onConflict,
       <input id="attachment-title" type="text" maxLength={200} placeholder="附件标题（默认文件名）" style={{ flex: 1, minWidth: 160 }} disabled={busy} value={title} onChange={e => setTitle(e.target.value)} />
       <button id="attachment-upload-btn" type="submit" className="outline" style={{ fontSize: '0.75rem' }} disabled={busy}>添加附件</button>
       <small id="attachment-status" style={{ fontWeight: 700, opacity: 0.65 }}>{status}</small></form>
-    <small style={{ display: 'block', marginTop: '0.5rem', opacity: 0.65 }}>支持图片、PDF、CSV、TXT；单个文件最大 16 MB。附件会随实验加密同步。</small>
+    <small style={{ display: 'block', marginTop: '0.5rem', opacity: 0.65 }}>支持图片、PDF、CSV、TXT；单个文件最大 16 MB。附件保存在服务端，按账号隔离。</small>
   </details>;
 }

@@ -1,6 +1,7 @@
+import pageStyles from '../../styles/experiment-detail.css?inline';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { invoke } from '../../legacy/invoke';
-import { ApiError, requestJson } from './api';
+import { services } from '../../runtime/services';
+import { ApiError, requestJson } from '../../shared/api';
 import { ArrayEdit, Editable, EditModal, EditorContext, Modes, TableEdit, TableView, type EditTarget } from './DetailEditor';
 import { DetailAttachments } from './DetailAttachments';
 import { ChildConversation } from './ChildConversation';
@@ -46,8 +47,8 @@ export function ExperimentDetail({ expId }: { expId: string }) {
     return () => controller.abort();
   }, [load]);
   useLayoutEffect(() => {
-    Object.assign(window, { ExperMateDetail: true, _isEditing: editing || child || pending || attachmentBusy });
-    return () => { delete (window as unknown as { ExperMateDetail?: boolean }).ExperMateDetail; Object.assign(window, { _isEditing: false }); };
+    Object.assign(services, { _isEditing: editing || child || pending || attachmentBusy });
+    return () => { Object.assign(services, { _isEditing: false }); };
   }, [editing, child, pending, attachmentBusy]);
   useLayoutEffect(() => {
     if (!exp) return;
@@ -112,7 +113,7 @@ export function ExperimentDetail({ expId }: { expId: string }) {
   function archive() {
     void action(async () => {
       await requestJson(`/experiments/${encodeURIComponent(expId)}/${exp!.archived ? 'restore' : 'archive'}`, { method: 'POST', signal: request.current.signal, body: JSON.stringify({ expected_revision: exp!.revision || 0 }) });
-      invoke('ExdiarySound.play', 'delete'); await load();
+      services.ExdiarySound?.play('delete'); await load();
     });
   }
   function reloadLatest() {
@@ -120,7 +121,7 @@ export function ExperimentDetail({ expId }: { expId: string }) {
     void load().then(() => setFeedback(null)).catch(fail);
   }
   const locked = (extra = false) => editing || busy || extra;
-  return <EditorContext.Provider value={{ editing, open: setTarget }}><link rel="stylesheet" href="/static/css/experiment-detail.css" />
+  return <EditorContext.Provider value={{ editing, open: setTarget }}><style>{pageStyles}</style>
     <div id="experiment-save-feedback" className={`flash${feedback ? feedback.error ? ' flash-error' : ' flash-success' : ''}`} role="status" aria-live="polite" hidden={!feedback}>{feedback?.message}
       {feedback?.conflict && <button type="button" className="outline" style={{ marginLeft: '0.6rem' }} onClick={reloadLatest}>加载最新内容</button>}</div>
     <div className="experiment-detail-header"><div style={{ minWidth: 0 }}>
@@ -140,7 +141,7 @@ export function ExperimentDetail({ expId }: { expId: string }) {
         <button id="btn-edit" className="outline experiment-detail-action" style={editing ? { display: 'none' } : undefined} disabled={busy || conflict.current} onClick={() => { setDraft(structuredClone(exp)); setEditing(true); setFeedback(null); }}>编辑</button>
         <button id="btn-save" className="experiment-detail-action" style={editing ? undefined : { display: 'none' }} disabled={!dirty || busy || conflict.current} aria-disabled={!dirty || busy || conflict.current} onClick={save}>{pending ? 'Saving...' : '保存'}</button>
         <button id="btn-cancel" className="outline experiment-detail-action" style={editing ? undefined : { display: 'none' }} disabled={busy} onClick={() => { setDraft(structuredClone(exp)); setTarget(null); setEditing(false); }}>取消</button>
-        <button id="btn-print" data-edit-lock className="outline experiment-detail-action" style={editing ? { display: 'none' } : undefined} disabled={locked()} onClick={() => invoke('openExperimentPrint', exp.id)}>PDF</button>
+        <button id="btn-print" data-edit-lock className="outline experiment-detail-action" style={editing ? { display: 'none' } : undefined} disabled={locked()} onClick={() => services.openExperimentPrint?.(exp.id)}>PDF</button>
         <button id="btn-archive" data-edit-lock className={`outline experiment-detail-action archive-action${editing ? ' edit-locked' : ''}`} disabled={locked() || conflict.current} onClick={archive}>{exp.archived ? '恢复到实验列表' : '归档'}</button>
       </div></div>
     {exp.original_notes && <details className="section-group narrative-section" id="section-original-notes"><summary>0. 原始记录</summary><Modes

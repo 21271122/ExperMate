@@ -1,4 +1,4 @@
-"""React 页面数据接口；复用已验证的账号或显式选择的独立离线仓储。"""
+"""React 页面数据接口；只使用服务端验证后的账号作用域。"""
 
 from io import BytesIO
 
@@ -10,8 +10,8 @@ _STATUSES = {"planned", "running", "done", "failed", "repeated"}
 
 @api_v1_bp.before_request
 def require_session():
-    # 不重解析 token，也不自行回退；离线许可只接受应用装配层的显式作用域。
-    if not getattr(g, "user_id", None) and not getattr(g, "frontend_offline", False):
+    # 认证由应用装配层统一验证；接口不自行回退到匿名数据。
+    if not getattr(g, "user_id", None):
         return jsonify(error={"code": "unauthenticated", "message": "请先登录"}), 401
 
 

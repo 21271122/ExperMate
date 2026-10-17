@@ -270,14 +270,6 @@ class ToolExecutor:
         try:
             return self.registry[name](args, loop)
         except Exception as e:
-            # 同步层已在冲突后回拉远端真值；把可恢复的并发错误明确交给 Agent，
-            # 让它重新读取资源，而不是把它当作普通的工具故障继续猜测。
-            from lib.e2ee.syncengine import SyncConflict
-            if isinstance(e, SyncConflict):
-                return {
-                    "error": "remote_revision_conflict",
-                    "message": "该资源刚刚在另一设备或窗口被更新。最新数据已同步到本机；请先重新读取，再决定是否修改。",
-                }
             return {"error": "execution_failed", "message": str(e)[:300]}
 
     @staticmethod
@@ -1485,12 +1477,6 @@ class AgentLoop:
         self._context_compression_chunk_tokens = min(
             requested_chunk, self._context_compression_trigger_tokens - 1_000,
         )
-
-        # 冷存储：被压缩裁掉的消息写入 _history/{user_id}/{session_id}.jsonl
-        _uid = thread_store._uid() if thread_store else ""
-        _cold_dir = Path(experiment_store.path).parent / "_history" / (_uid or "_anonymous")
-        _cold_dir.mkdir(parents=True, exist_ok=True)
-        self._cold_store_path = _cold_dir / f"{self.session_id}.jsonl"
 
         # 线程系统 + 子Agent 标记 + 服务引用
         self.thread_store = thread_store
@@ -2704,16 +2690,13 @@ class AgentLoop:
             new_summary = raw[:2000]
         except Exception:
             return  # 压缩失败：history 完好，不裁剪，不写冷存储，下次再试
-        # 压缩成功：先把完整原文写入 SQLite，成功后才能裁剪运行态。
-        # JSONL 继续保留作兼容备份，但后续查找应以数据库为准。
+        # 完整原文只归档到服务端 SQLite；归档失败不能裁剪运行态。
         try:
-            if hasattr(self.thread_store, "archive_compressed_history"):
-                self.thread_store.archive_compressed_history(
-                    self.session_id, self._compressed_history_count, to_summarize,
-                )
-            with open(self._cold_store_path, "a", encoding="utf-8") as f:
-                for m in to_summarize:
-                    f.write(_json.dumps(m, ensure_ascii=False) + "\n")
+            if not hasattr(self.thread_store, "archive_compressed_history"):
+                return
+            self.thread_store.archive_compressed_history(
+                self.session_id, self._compressed_history_count, to_summarize,
+            )
         except Exception:
             return
         self._compressed_history_count += len(to_summarize)
@@ -2796,11 +2779,6 @@ class AgentLoop:
         loop._compressed_until_sequence = data.get(
             "_compressed_until_sequence", loop._compressed_history_count - 1,
         )
-        # 冷存储路径：保持和 session_id 一致（按用户隔离）
-        _uid = thread_store._uid() if thread_store else ""
-        _cold_dir = Path(store.path).parent / "_history" / (_uid or "_anonymous")
-        _cold_dir.mkdir(parents=True, exist_ok=True)
-        loop._cold_store_path = _cold_dir / f"{loop.session_id}.jsonl"
         loop.child.is_child = data.get("_is_child_agent", False)
         loop.child.is_legacy = data.get("_is_legacy", False)
         loop.child.exp_id = data.get("_child_exp_id")

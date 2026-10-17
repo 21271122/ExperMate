@@ -1,3 +1,7 @@
+import './styles/shell.css';
+import './styles/de-stijl.css';
+import './styles/components.css';
+import './styles/motion.css';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 

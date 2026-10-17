@@ -53,6 +53,5 @@ def api_parse_confirm():
     data["references"] = refs
     g.exp_repo.save(data)
     g.experiment_svc.update_referenced_by(exp_id, refs)
-    g.experiment_svc.move_draft_images(exp_id)
     _notify_experiment_created(exp_id)
     return jsonify({"ok": True, "exp_id": exp_id})

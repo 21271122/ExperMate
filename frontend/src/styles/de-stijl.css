@@ -117,7 +117,7 @@ html { scrollbar-gutter: stable; }
 
 body {
   font-family: var(--font-ui);
-  {% block page_bg %}background-color: var(--white);{% endblock %}
+  background-color: var(--white);
   color: var(--black);
   min-height: 100vh;
   margin: 0;
@@ -606,11 +606,11 @@ mark.highlight { background: var(--yellow); padding: 0 1px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); }
 
 /* ---- Responsive ---- */
-{% block topbar_style %}
+
 .topbar { background: var(--white); }
 .topbar-back { background: var(--black); color: var(--white); }
 .topbar-back:hover { background: var(--white); color: var(--black); }
-{% endblock %}
+
 
 @media (max-width: 576px) {
   .container { padding: 0.8rem 0.5rem; }

@@ -32,7 +32,9 @@ class TemplateService:
         return templates
 
     def load(self, template_id: str) -> dict[str, Any] | None:
-        fp = self.path / f"{template_id}.yaml"
+        fp = (self.path / f"{template_id}.yaml").resolve()
+        if not fp.is_relative_to(self.path.resolve()):
+            return None
         if not fp.exists():
             return None
         with open(fp, "r", encoding="utf-8") as f:

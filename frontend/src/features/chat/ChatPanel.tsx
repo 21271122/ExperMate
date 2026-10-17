@@ -1,4 +1,4 @@
-import { invoke } from '../../legacy/invoke';
+import { services } from '../../runtime/services';
 import { AccountLink } from '../account/AccountContext';
 import { useChat } from './ChatContext';
 import { ChatMessages } from './ChatMessages';
@@ -10,7 +10,7 @@ export function ChatPanel() {
   return <>
         <div id={"chat-panel"} data-thread-theme={state.theme}>
           <div id={"chat-header"}>
-            <a href={"/"} id={"chat-brand"} title={"ExperMate｜小同门"} onClick={event=>{event.preventDefault();if(event.detail!==2)invoke('PanelManager.navigate','/');}} onDoubleClick={event=>{event.preventDefault();invoke('showSupportModal');}}>
+            <a href={"/"} id={"chat-brand"} title={"ExperMate｜小同门"} onClick={event=>{event.preventDefault();if(event.detail!==2)services.PanelManager?.navigate('/');}} onDoubleClick={event=>{event.preventDefault();services.showSupportModal?.();}}>
               <span className={"dot"} />
               <span className={"brand-letters"}>
                 <span>
@@ -53,7 +53,7 @@ export function ChatPanel() {
                 <path d={"m18.8 18.8 2 2"} />
               </svg>
             </button>
-            <a href={"#"} id={"chat-header-settings"} title={"设置"} aria-label={"设置"} onClick={(event) => { invoke("PanelManager.navigate", '/settings');event.preventDefault(); }}>
+            <a href={"#"} id={"chat-header-settings"} title={"设置"} aria-label={"设置"} onClick={(event) => { services.PanelManager?.navigate('/settings');event.preventDefault(); }}>
               <svg viewBox={"0 0 24 24"} aria-hidden={"true"}>
                 <path d={"M4 7h16M4 12h16M4 17h16M9 5v4M15 10v4M11 15v4"} />
               </svg>

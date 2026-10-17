@@ -5,18 +5,16 @@ import sqlite3
 from datetime import datetime
 from typing import Any
 
+from lib.experiment_ids import new_device_code, normalize_device_code
 from lib.repositories.base import AbstractAnalysisRepository
 from lib.repositories.sqlite_common import UserScopeMixin
-from lib.experiment_ids import new_device_code, normalize_device_code
 
 
 class SqliteAnalysisRepository(AbstractAnalysisRepository, UserScopeMixin):
-    def __init__(self, db: sqlite3.Connection, uid_provider=None, on_dirty=None,
+    def __init__(self, db: sqlite3.Connection, uid_provider=None,
                  device_code: str = "") -> None:
-        """on_dirty: 写入/删除后同步标记回调 (entity_id, tombstone)。"""
         UserScopeMixin.__init__(self, uid_provider)
         self.db = db
-        self._on_dirty = on_dirty
         self.device_code = normalize_device_code(device_code) or new_device_code()
         self.db.row_factory = sqlite3.Row
         self._create_tables()
@@ -62,9 +60,12 @@ class SqliteAnalysisRepository(AbstractAnalysisRepository, UserScopeMixin):
         aid = analysis.get("id") or self.next_id()
         analysis["id"] = aid
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.db.execute(
-            'INSERT OR REPLACE INTO analyses ("user_id","id","timestamp","question","selected_ids","analysis","source_snapshot","created_at") '
-            "VALUES (?,?,?,?,?,?,?,?)",
+        cursor = self.db.execute(
+            'INSERT INTO analyses ("user_id","id","timestamp","question","selected_ids","analysis","source_snapshot","created_at") '
+            "VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+            'timestamp=excluded.timestamp,question=excluded.question,selected_ids=excluded.selected_ids,'
+            'analysis=excluded.analysis,source_snapshot=excluded.source_snapshot,created_at=excluded.created_at '
+            'WHERE analyses.user_id=excluded.user_id',
             (
                 uid,
                 aid,
@@ -76,8 +77,8 @@ class SqliteAnalysisRepository(AbstractAnalysisRepository, UserScopeMixin):
                 analysis.get("created_at", now),
             ),
         )
-        if self._on_dirty is not None:
-            self._on_dirty(aid, False)
+        if not cursor.rowcount:
+            raise ValueError("记录编号不可用，请重新创建记录")
         return aid
 
     def load(self, aid: str, user_id: str | None = None) -> dict[str, Any] | None:
@@ -118,7 +119,4 @@ class SqliteAnalysisRepository(AbstractAnalysisRepository, UserScopeMixin):
         cur = self.db.execute(
             "DELETE FROM analyses WHERE id = ? AND user_id = ?", (aid, uid)
         )
-        if cur.rowcount > 0:
-            if self._on_dirty is not None:
-                self._on_dirty(aid, True)
         return cur.rowcount > 0

@@ -3,17 +3,16 @@
 import json
 import sqlite3
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
+from lib.experiment_ids import new_device_code, normalize_device_code
 from lib.repositories.base import AbstractExperimentRepository
 from lib.repositories.sqlite_common import UserScopeMixin
-from lib.experiment_ids import new_device_code, normalize_device_code
 from lib.repositories.sqlite_schema import (
+    FIELD_DEFAULTS,
     SQL_CREATE_EXPERIMENTS,
     SQL_CREATE_FTS,
     SQL_CREATE_INDEXES,
-    FIELD_DEFAULTS,
 )
 
 _JSON_FIELDS: set[str] = {
@@ -27,13 +26,10 @@ _SCHEMA_VERSION = 6
 
 
 class SqliteExperimentRepository(AbstractExperimentRepository, UserScopeMixin):
-    def __init__(self, db: sqlite3.Connection, data_dir: str = "",
-                 uid_provider=None, on_dirty=None, device_code: str = "") -> None:
-        """uid_provider: 请求上下文注入的用户 ID 解析；on_dirty: 保存后同步标记回调。"""
+    def __init__(self, db: sqlite3.Connection, uid_provider=None, device_code: str = "") -> None:
+        """uid_provider: 请求上下文注入的用户 ID 解析。"""
         UserScopeMixin.__init__(self, uid_provider)
         self.db = db
-        self.path = data_dir  # 文件操作兼容（冷存储 _history、debug 等）
-        self._on_dirty = on_dirty
         self.device_code = normalize_device_code(device_code) or new_device_code()
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys=ON")
@@ -42,14 +38,6 @@ class SqliteExperimentRepository(AbstractExperimentRepository, UserScopeMixin):
     def _create_tables(self) -> None:
         self.db.execute(SQL_CREATE_EXPERIMENTS)
         self.db.execute(SQL_CREATE_FTS)
-        self.db.execute("""CREATE TABLE IF NOT EXISTS sync_queue (
-            user_id     TEXT DEFAULT '',
-            entity_type TEXT NOT NULL DEFAULT 'experiment',
-            entity_id   TEXT NOT NULL DEFAULT '',
-            created_at  TEXT DEFAULT '',
-            tombstone   INTEGER DEFAULT 0,
-            PRIMARY KEY (user_id, entity_type, entity_id)
-        )""")
         self.db.execute("""CREATE TABLE IF NOT EXISTS experiment_id_counters (
             year TEXT NOT NULL, device_code TEXT NOT NULL, next_number INTEGER NOT NULL,
             PRIMARY KEY (year, device_code)
@@ -68,29 +56,6 @@ class SqliteExperimentRepository(AbstractExperimentRepository, UserScopeMixin):
                 self.db.execute("ALTER TABLE experiments ADD COLUMN field_updated_at TEXT DEFAULT '{}'")
             except sqlite3.OperationalError:
                 pass
-        if cur < 4:
-            # v4: sync_queue 重建表（加 entity_type + entity_id，旧 exp_id 列移除）
-            try:
-                self.db.execute("ALTER TABLE sync_queue ADD COLUMN entity_type TEXT DEFAULT 'experiment'")
-                self.db.execute("ALTER TABLE sync_queue ADD COLUMN entity_id TEXT DEFAULT ''")
-                self.db.execute("UPDATE sync_queue SET entity_id = exp_id WHERE entity_id = ''")
-            except sqlite3.OperationalError:
-                pass
-            # 重建表更换 PK（旧表有 exp_id NOT NULL 无 DEFAULT，INSERT 不兼容）
-            self.db.executescript("""
-                CREATE TABLE IF NOT EXISTS sync_queue_new (
-                    user_id     TEXT DEFAULT '',
-                    entity_type TEXT NOT NULL DEFAULT 'experiment',
-                    entity_id   TEXT NOT NULL DEFAULT '',
-                    created_at  TEXT DEFAULT '',
-                    tombstone   INTEGER DEFAULT 0,
-                    PRIMARY KEY (user_id, entity_type, entity_id)
-                );
-                INSERT OR IGNORE INTO sync_queue_new
-                    SELECT user_id, entity_type, entity_id, created_at, tombstone FROM sync_queue;
-                DROP TABLE sync_queue;
-                ALTER TABLE sync_queue_new RENAME TO sync_queue;
-            """)
         if cur < 5:
             try:
                 self.db.execute("ALTER TABLE experiments ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
@@ -155,14 +120,16 @@ class SqliteExperimentRepository(AbstractExperimentRepository, UserScopeMixin):
         row["created_at"] = experiment.get("created_at") or now
         quoted_cols = ", ".join(f'"{c}"' for c in row)
         placeholders = ", ".join("?" * len(row))
-        self.db.execute(
-            f"INSERT OR REPLACE INTO experiments ({quoted_cols}) VALUES ({placeholders})",
+        updates = ", ".join(f'"{key}"=excluded."{key}"' for key in row if key != "id")
+        cursor = self.db.execute(
+            f"INSERT INTO experiments ({quoted_cols}) VALUES ({placeholders}) "
+            f"ON CONFLICT(id) DO UPDATE SET {updates} WHERE experiments.user_id=excluded.user_id",
             list(row.values()),
         )
+        if not cursor.rowcount:
+            raise ValueError("记录编号不可用，请重新创建记录")
         self.db.commit()
         experiment["revision"] = revision
-        if self._on_dirty is not None:
-            self._on_dirty(exp_id, False)
         return exp_id
 
     def save_if_revision(self, experiment: dict[str, Any], expected_revision: int,
@@ -203,50 +170,8 @@ class SqliteExperimentRepository(AbstractExperimentRepository, UserScopeMixin):
                     "revision": int(current.get("revision", 0) or 0)}
         self.db.commit()
         experiment["revision"] = actual_revision + 1
-        if self._on_dirty is not None:
-            try:
-                self._on_dirty(exp_id, False)
-            except Exception as exc:
-                from lib.e2ee.syncengine import SyncConflict
-                if isinstance(exc, SyncConflict):
-                    # 网关已拉回远端真值；本次本地乐观写不能再向调用方报成功。
-                    current = self.load(exp_id, user_id=uid) or {}
-                    return {
-                        "ok": False,
-                        "error": "remote_revision_conflict",
-                        "revision": int(current.get("revision", 0) or 0),
-                    }
-                raise
         return {"ok": True, "revision": actual_revision + 1}
 
-    def import_synced(self, experiment: dict[str, Any], user_id: str | None = None) -> str:
-        """写入远端已确认的实验真值，不递增本地 revision、也不再次触发同步。"""
-        exp_id = experiment.get("id")
-        if not exp_id:
-            raise ValueError("同步实验缺少 id")
-        uid = user_id if user_id is not None else self._uid()
-        row: dict[str, Any] = {
-            "user_id": uid,
-            "id": exp_id,
-            "updated_at": experiment.get("updated_at") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "revision": int(experiment.get("revision", 0) or 0),
-        }
-        for key, default in FIELD_DEFAULTS.items():
-            val = experiment.get(key, default)
-            if key == "archived":
-                row[key] = 1 if val else 0
-            else:
-                row[key] = json.dumps(val, ensure_ascii=False) if isinstance(val, (list, dict)) else str(val)
-        row["field_updated_at"] = json.dumps(experiment.get("field_updated_at", {}), ensure_ascii=False)
-        row["created_at"] = experiment.get("created_at") or row["updated_at"]
-        quoted_cols = ", ".join(f'"{column}"' for column in row)
-        placeholders = ", ".join("?" * len(row))
-        self.db.execute(
-            f"INSERT OR REPLACE INTO experiments ({quoted_cols}) VALUES ({placeholders})",
-            list(row.values()),
-        )
-        self.db.commit()
-        return exp_id
 
     def load(self, exp_id: str, user_id: str | None = None) -> dict[str, Any] | None:
         uid = user_id if user_id is not None else self._uid()
@@ -344,46 +269,8 @@ class SqliteExperimentRepository(AbstractExperimentRepository, UserScopeMixin):
             "DELETE FROM experiments WHERE id = ? AND user_id = ?",
             (exp_id, uid),
         )
-        if cur.rowcount > 0:
-            self.mark_sync_dirty("experiment", exp_id, tombstone=True)
-            if self._on_dirty is not None:
-                self._on_dirty(exp_id, True)
         return cur.rowcount > 0
 
-    def mark_sync_dirty(self, entity_type: str, entity_id: str, tombstone: bool = False) -> None:
-        uid = self._uid()
-        if not uid:
-            return
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        if tombstone:
-            self.db.execute(
-                "DELETE FROM sync_queue WHERE user_id=? AND entity_type=? AND entity_id=?",
-                (uid, entity_type, entity_id),
-            )
-        self.db.execute(
-            "INSERT OR IGNORE INTO sync_queue (user_id,entity_type,entity_id,created_at,tombstone) "
-            "VALUES (?,?,?,?,?)",
-            (uid, entity_type, entity_id, now, 1 if tombstone else 0),
-        )
-
-    mark_sync_tombstone = None  # 已合并到 mark_sync_dirty(..., tombstone=True)
-
-    def get_sync_dirty(self, user_id: str, limit: int = 100) -> list[dict[str, Any]]:
-        rows = self.db.execute(
-            "SELECT entity_type, entity_id, tombstone FROM sync_queue WHERE user_id = ? ORDER BY created_at LIMIT ?",
-            (user_id, limit),
-        ).fetchall()
-        return [
-            {"entity_type": r["entity_type"], "id": r["entity_id"], "tombstone": bool(r["tombstone"])}
-            for r in rows
-        ]
-
-    def clear_sync_dirty(self, entity_keys: list[tuple[str, str]], user_id: str) -> None:
-        for entity_type, entity_id in entity_keys:
-            self.db.execute(
-                "DELETE FROM sync_queue WHERE user_id = ? AND entity_type = ? AND entity_id = ?",
-                (user_id, entity_type, entity_id),
-            )
 
     def count(self, include_archived: bool = False) -> int:
         return self.db.execute(

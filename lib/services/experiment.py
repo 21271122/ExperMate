@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
-from pathlib import Path
 from typing import Any
 import json as _json
 from lib.experiment_ids import find_references
@@ -15,12 +13,10 @@ class ExperimentService:
         exp_repo: Any,
         update_log_repo: Any,
         favorites_repo: Any,
-        base_dir: Path | None = None,
     ):
         self.exp_repo = exp_repo
         self.update_log_repo = update_log_repo
         self.favorites_repo = favorites_repo
-        self.base_dir = base_dir
 
     # -- 公共 API --
 
@@ -33,6 +29,7 @@ class ExperimentService:
     ) -> None:
         """保存实验 + 自动计算 diff + 写更新日志。
         自动判断新建（调 save()）还是修改（调 update()）。"""
+        data["id"] = exp_id
         old = self.exp_repo.load(exp_id)
         if old is None:
             self.exp_repo.save(data)
@@ -149,18 +146,6 @@ class ExperimentService:
             )
         self.update_referenced_by(exp_id, refs, old_refs=old_refs)
         return result
-
-    def move_draft_images(self, exp_id: str) -> None:
-        """将 uploads/_draft/ 中的图片迁移到 uploads/<exp_id>/"""
-        if not self.base_dir:
-            return
-        draft_dir = self.base_dir / "uploads" / "_draft"
-        if draft_dir.exists():
-            exp_img_dir = self.base_dir / "uploads" / exp_id
-            exp_img_dir.mkdir(parents=True, exist_ok=True)
-            for f in draft_dir.iterdir():
-                shutil.move(str(f), str(exp_img_dir / f.name))
-            draft_dir.rmdir()
 
     def get_pinned_and_others(self) -> tuple[list[dict[str, Any]], list[str]]:
         """获取置顶 + 其余实验列表"""

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { requestJson } from '../features/experiments/api';
+import { requestJson } from '../shared/api';
 
 export function usePageData<T>(url: string, path: string) {
   const [data, setData] = useState<T | null>(null), [error, setError] = useState('');

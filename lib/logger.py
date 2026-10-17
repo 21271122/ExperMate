@@ -30,6 +30,9 @@ def init_logger(base_dir: str | Path) -> "ExdiaryLogger":
 
 
 def get_logger() -> "ExdiaryLogger | None":
+    from flask import current_app, has_app_context
+    if has_app_context():
+        return current_app.extensions.get("exdiary_logger")
     return _logger
 
 

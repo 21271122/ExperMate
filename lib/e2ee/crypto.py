@@ -1,23 +1,20 @@
-"""Exdiary v2 端到端加密实现。
+"""账号口令派生与密钥信封原语。
 
-端到端加密同步的密码学原语层。
+账号认证与恢复使用的密码学原语层。
 本包只承载 **纯算法**（无数据库、无网络、无 KMS），可独立单元测试：
-  密码 NFC 归一化 → Argon2id 派生 → AES-256-GCM envelope → canonical AAD → blob 加解密。
+  密码 NFC 归一化 → Argon2id 派生 → AES-256-GCM envelope → canonical AAD。
 
 设计要点（与架构文档保持一致）：
 - password_bytes = UTF8(NFC(password))，客户端/服务器两端必须一致。
 - 认证哈希与加密 KEK 用**独立盐**派生（用途隔离），参数各自 ≥ floor。
 - envelope 用 AES-256-GCM；每次加密用全新随机 nonce。
 - AAD 用长度前缀(uint16) canonical 编码，禁止手写 `a + "|" + b`。
-- blob 的 AAD 覆盖 AuthenticatedCleartextHeader 全部字段 + account_id + blob_uuid。
 """
 
 from __future__ import annotations
 
 import os
 import unicodedata
-from dataclasses import dataclass
-from typing import Sequence
 
 from argon2.low_level import Type as Argon2Type
 from argon2.low_level import hash_secret_raw
@@ -32,13 +29,6 @@ __all__ = [
     "canonical_aad",
     "create_password_envelope",
     "open_password_envelope",
-    "BlobHeader",
-    "header_to_bytes",
-    "header_from_bytes",
-    "canonical_blob_aad",
-    "encrypt_blob",
-    "decrypt_blob",
-    "NonceBudget",
     "EnvelopeError",
 ]
 
@@ -49,7 +39,7 @@ __all__ = [
 # AES-256-GCM
 _ALG = "AES-256-GCM"
 
-# 默认 Argon2id 参数（KiB 单位）。架构文档推荐桌面目标值 64MiB/t=3/p=1。
+# 默认 Argon2id 参数（KiB 单位）。当前默认值 64MiB/t=3/p=1。
 # 认证与加密可独立微调，但都必须 ≥ 统一 floor（见 _MIN*）。
 DEFAULT_KDF = {
     "type": "Argon2id",
@@ -225,147 +215,3 @@ def open_password_envelope(
         return AESGCM(kek).decrypt(nonce, ct_tag, aad)
     except Exception as e:  # InvalidTag 等
         raise EnvelopeError("envelope 认证失败（密钥错或数据被篡改）") from e
-
-
-# ---------------------------------------------------------------------------
-# blob：明文头 + AAD + AES-GCM
-# ---------------------------------------------------------------------------
-
-_BLOB_MAGIC = b"EXBL"
-_BLOB_HEADER_VER = 1
-
-
-@dataclass(frozen=True)
-class BlobHeader:
-    """AuthenticatedCleartextHeader：明文传输，且全部字段进入 AAD。
-
-    crypto_format_version 用于锁死后续序列化/编码/密钥轮换规则（防 downgrade/歧义）。
-    """
-
-    crypto_format_version: int
-    object_type: str
-    schema_version: int
-    key_version: int
-    blob_revision: int
-    nonce: bytes
-
-    def to_bytes(self) -> bytes:
-        # 明文字节：magic | hdrver | cform(1) | otype(打包) | schema(2) | key(2) | rev(4) | nonce(12)
-        otype_b = self.object_type.encode("utf-8")
-        if len(otype_b) > 0xFF:
-            raise ValueError("object_type 过长")
-        return (
-            _BLOB_MAGIC
-            + bytes([_BLOB_HEADER_VER, self.crypto_format_version])
-            + bytes([len(otype_b)]) + otype_b
-            + self.schema_version.to_bytes(2, "big")
-            + self.key_version.to_bytes(2, "big")
-            + self.blob_revision.to_bytes(4, "big")
-            + self.nonce
-        )
-
-    @classmethod
-    def from_bytes(cls, data: bytes) -> "BlobHeader":
-        if len(data) < 4 + 2 + 1 + 12 + 4:
-            raise EnvelopeError("blob header 过短")
-        if data[:4] != _BLOB_MAGIC:
-            raise EnvelopeError("bad blob header magic")
-        hdr_ver = data[4]
-        if hdr_ver != _BLOB_HEADER_VER:
-            raise EnvelopeError(f"unsupported blob header version: {hdr_ver}")
-        cform = data[5]
-        olen = data[6]
-        pos = 7
-        otype = data[pos : pos + olen].decode("utf-8")
-        pos += olen
-        schema = int.from_bytes(data[pos : pos + 2], "big"); pos += 2
-        keyver = int.from_bytes(data[pos : pos + 2], "big"); pos += 2
-        rev = int.from_bytes(data[pos : pos + 4], "big"); pos += 4
-        nonce = data[pos : pos + 12]
-        return cls(cform, otype, schema, keyver, rev, nonce)
-
-    def canonical_aad_fields(self) -> tuple[object, ...]:
-        return (
-            self.crypto_format_version,
-            self.object_type,
-            self.schema_version,
-            self.key_version,
-            self.blob_revision,
-            self.nonce,
-        )
-
-
-def canonical_blob_aad(
-    account_id: bytes,
-    blob_uuid: bytes,
-    header: BlobHeader,
-) -> bytes:
-    """blob AAD = canonical(account_id, blob_uuid, header 全字段)。"""
-    return canonical_aad(account_id, blob_uuid, *header.canonical_aad_fields())
-
-
-def _encrypt_gcm(key: bytes, nonce: bytes, plaintext: bytes, aad: bytes) -> bytes:
-    return AESGCM(key).encrypt(nonce, plaintext, aad)
-
-
-def _decrypt_gcm(key: bytes, nonce: bytes, data: bytes, aad: bytes) -> bytes:
-    return AESGCM(key).decrypt(nonce, data, aad)
-
-
-def encrypt_blob(
-    dek: bytes,
-    account_id: bytes,
-    blob_uuid: bytes,
-    header: BlobHeader,
-    plaintext: bytes,
-) -> bytes:
-    """用 DEK 加密一条 blob：返回 ct||tag。AAD 来自 account_id+blob_uuid+header。"""
-    if len(dek) != 32:
-        raise ValueError("DEK 必须是 32 字节")
-    aad = canonical_blob_aad(account_id, blob_uuid, header)
-    return _encrypt_gcm(dek, header.nonce, plaintext, aad)
-
-
-def decrypt_blob(
-    dek: bytes,
-    account_id: bytes,
-    blob_uuid: bytes,
-    header: BlobHeader,
-    data: bytes,
-) -> bytes:
-    """用 DEK 解一条 blob。AAD/密文被改 → EnvelopeError。"""
-    if len(dek) != 32:
-        raise ValueError("DEK 必须是 32 字节")
-    aad = canonical_blob_aad(account_id, blob_uuid, header)
-    try:
-        return _decrypt_gcm(dek, header.nonce, data, aad)
-    except Exception as e:
-        raise EnvelopeError("blob 认证失败（密钥错或数据被篡改）") from e
-
-
-# ---------------------------------------------------------------------------
-# 单 DEK nonce 预算（本地单实例）
-# ---------------------------------------------------------------------------
-
-
-class NonceBudget:
-    """跟踪单 DEK 的加密次数，超上限即拒绝（防 (key, nonce) 复用）。
-
-    注意：多设备共享同一 DEK 时，这是**所有设备总和**的预算；跨设备协调
-    属于 crypto implementation spec（架构文档 12 节），本层只提供单实例哨兵。
-    """
-
-    def __init__(self, max_ops: int = 2**32) -> None:
-        if max_ops <= 0:
-            raise ValueError("max_ops 必须为正")
-        self._max = max_ops
-        self._count = 0
-
-    @property
-    def count(self) -> int:
-        return self._count
-
-    def reserve(self, n: int = 1) -> None:
-        if self._count + n > self._max:
-            raise EnvelopeError("单 DEK 加密次数超过安全上限，请轮换 DEK")
-        self._count += n

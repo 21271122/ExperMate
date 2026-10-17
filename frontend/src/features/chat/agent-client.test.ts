@@ -7,6 +7,23 @@ function eventResponse(events: unknown[]) {
 }
 afterEach(()=>{vi.unstubAllGlobals();sessionStorage.clear();localStorage.clear();});
 
+test('启动只读取服务端历史，不重复问候，也不使用旧本机令牌', async()=>{
+  localStorage.setItem('exdiary_token','obsolete-token');sessionStorage.setItem('exdiary_agent_state',JSON.stringify({history:[{role:'user',content:'obsolete history'}]}));
+  const fetchMock=vi.fn(async(path:string,options?:RequestInit)=>{
+    expect(options?.headers).not.toHaveProperty('Authorization');
+    return path.endsWith('/events') ? eventResponse([]) : new Response(JSON.stringify({ok:true,state:{},history:[{role:'assistant',content:'server greeting'}],message:'server greeting'}));
+  });vi.stubGlobal('fetch',fetchMock);
+  const message=vi.fn(),client=createAgentClient({});client.init({onMessage:message});
+  expect(await client.start()).toBe(true);expect(message).toHaveBeenCalledOnce();expect(message.mock.calls[0][0].content).toBe('server greeting');client.dispose();
+});
+
+test('服务端不可用时不会把旧浏览器缓存当作会话恢复成功', async()=>{
+  sessionStorage.setItem('exdiary_agent_state',JSON.stringify({history:[{role:'user',content:'obsolete history'}]}));
+  vi.stubGlobal('fetch',vi.fn(async()=>{throw new Error('server unavailable');}));
+  const message=vi.fn(),error=vi.fn(),client=createAgentClient({});client.init({onMessage:message,onError:error});
+  expect(await client.start()).toBe(false);expect(message).not.toHaveBeenCalled();expect(error).toHaveBeenCalledWith('server unavailable');client.dispose();
+});
+
 test('UTF-8 跨块、心跳与无末尾换行不会丢失事件',async()=>{
   const bytes=new TextEncoder().encode('data: {"event":"text","content":"实验"}\n\n: heartbeat\n\ndata: {"event":"done"}');
   const stream=new ReadableStream({start(controller){for(const value of bytes)controller.enqueue(new Uint8Array([value]));controller.close();}});

@@ -4,23 +4,23 @@
 >
 > 源码依据：`lib/config.py`、`app.py`、`routes/settings.py`
 
-ExperMate 的设置由 `config.yaml` 保存。首次启动时，如果同目录没有 `config.yaml`，程序会读取 `.env`，迁移为 `config.yaml`，之后以 `config.yaml` 为准。
+ExperMate 的设置由服务端数据目录的 `config.yaml` 保存。首次缺少该文件时读取同目录 `.env`；进程环境变量优先于 YAML。普通用户不能修改全局模型设置。
 
 技术兼容性说明：当前环境变量、配置键和仓库目录仍使用 `EXDIARY_*` 前缀；产品名称已更新为 ExperMate｜小同门，但这些技术名称暂不改动。
 
 ## 最小配置
 
-复制 `.env.example` 为 `.env`，填写模型服务信息：
+复制 `.env.example` 为服务端数据目录的 `.env`，填写模型服务信息：
 
 ```dotenv
 LLM_AGENT_PROVIDER=deepseek
 LLM_AGENT_API_KEY=你的密钥
 LLM_AGENT_MODEL=你的模型名
 PORT=5000
-GUI=true
+HOST=127.0.0.1
 ```
 
-首次启动后可在“设置”页面继续编辑。API Key、密码、数据库和同步密钥都不应提交到 Git。
+首次启动后管理员可在“设置”页面继续编辑模型参数。API Key、密码、数据库和同步密钥都不应提交到 Git。
 
 ## 模型设置
 
@@ -50,39 +50,16 @@ GUI=true
 
 上下文整理仅用于主聊天。记录和分析子 Agent 服务于当前任务，不使用主聊天的长期压缩机制。
 
-## 运行与本机数据
+## 服务端路径与权限
 
-| 字段 | 默认值 | 用途 |
-| --- | --- | --- |
-| `HOST` | `0.0.0.0` | Flask 监听地址；公开或局域网部署前应评估访问控制 |
-| `PORT` | `5000` | 本地服务端口 |
-| `GUI` | `true` | 是否尝试打开 pywebview 桌面窗口 |
-| `DEVICE_CODE` | 自动生成 | 当前登录数据设备的编号前缀 |
-| `OFFLINE_DEVICE_CODE` | 自动生成 | 离线数据设备的编号前缀 |
+默认目录为项目下 `data/`，其中包含 `config.yaml`、`data.db`、账号库、恢复密钥、模板和日志。通过 `--data-dir` 或进程环境变量 `DATA_DIR`、`EXPERMATE_DATA_DIR`、`EXDIARY_DATA_DIR` 指定服务端目录。`EXDIARY_SETTINGS` / `--config` 可指定配置文件，`EXDIARY_DB` 可指定业务库。
 
-启动参数 `--headless` 会只启动网页服务，不打开桌面窗口。
+`HOST` 默认 `127.0.0.1`，`PORT` 默认 `5000`，也可使用启动参数指定。监听地址、端口、管理员名单和 SMTP 均由运维管理；网页只提交模型参数。`GUI`、`OFFLINE_DEVICE_CODE`、`RELAY_*` 已删除，旧配置中的这些字段会被忽略。
 
-默认运行数据统一放在项目根目录的 `data/`。在 `.env` 或 `config.yaml` 中设置 `DATA_DIR` 可改为其他目录；部署环境也可用 `EXPERMATE_DATA_DIR` 覆盖，旧变量 `EXDIARY_DATA_DIR` 仍可使用。`EXDIARY_DB`、`EXDIARY_ACCOUNT_DB`、`EXDIARY_KMS_KEY_FILE` 仍可分别覆盖单个文件路径，主要用于部署或多实例测试。
+`ADMIN_ACCOUNTS` 在 YAML 中是字符串列表，在进程环境中用逗号分隔。`ALLOW_REGISTRATION` 控制公开注册。`JWT_SECRET` 未配置时生成并保存；需随配置备份以保持会话签名稳定。账号和恢复材料位于服务端，不写入 Windows 凭据库。
 
-## 安全与同步
+恢复邮件使用 `SMTP_HOST`、`SMTP_PORT`（默认 587）、`SMTP_USERNAME`、`SMTP_PASSWORD`、`SMTP_FROM`，通过 STARTTLS 发送。未配置时恢复接口明确不可用，不在网页回显恢复凭证。
 
-| 字段 | 用途 |
-| --- | --- |
-| `ENCRYPTION_KEY` | 可选的数据库加密密钥；生产环境优先通过环境变量提供 |
-| `JWT_SECRET` | 登录令牌签名密钥；为空时程序生成并写入本机配置 |
-| `RELAY_URL` | 可选同步中继地址；为空时为纯本地模式 |
-| `RELAY_API_KEY` | 中继访问密钥；敏感信息 |
+HTTPS 反代使用受控代理时设置 `TRUSTED_PROXY_HOPS`，默认 0。`ENCRYPTION_KEY` / `EXDIARY_ENC_KEY` 可启用服务端 SQLCipher；配置加密但缺少 SQLCipher 时拒绝启动。服务器能读取业务数据，账号隔离不是对服务器端到端加密。
 
-账户安全状态、恢复邮箱与恢复材料由本机账号库管理。它们和数据库一样属于必须备份、不可公开的内容。
-
-## 配置位置与生效方式
-
-- `EXDIARY_SETTINGS`：指定 `config.yaml` 的位置。
-- `DATA_DIR`：写入 `.env` 或 `config.yaml` 的运行数据目录，包含业务数据库、账号安全库、旧附件兼容文件与日志。
-- `EXPERMATE_DATA_DIR`：部署环境中覆盖 `DATA_DIR` 的运行数据目录。
-- `EXDIARY_DATA_DIR`：`EXPERMATE_DATA_DIR` 的旧名称，保留兼容。
-- `EXDIARY_DB`：指定登录数据数据库位置。
-- `EXDIARY_ACCOUNT_DB`、`EXDIARY_KMS_KEY_FILE`：服务器部署时指定账号库与密钥文件位置。
-- 通过设置页保存的配置会写回 `config.yaml`；涉及监听地址、端口、桌面窗口和进程级模型客户端的改动，建议重启应用后确认。
-
-完整启动步骤见[本地运行](local-run.md)；备份边界见[数据、备份与恢复](../operations/data-and-backup.md)。
+完整配置优先级、初始化与旧数据导入见[服务端运行迁移说明](../server-runtime-migration.md)。

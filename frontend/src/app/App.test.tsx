@@ -1,3 +1,4 @@
+import { services } from '../runtime/services';
 import { readFileSync } from 'node:fs';
 import { render, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -27,7 +28,10 @@ function structure(node: Node): unknown {
   return { tag: node.tagName, attributes, style, children: [...node.childNodes].map(structure).filter(Boolean) };
 }
 
-beforeEach(() => vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ok:false}), {status:401}))));
+beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ok:false}), {status:401})));
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+});
 afterEach(() => {vi.restoreAllMocks();vi.unstubAllGlobals();localStorage.clear();});
 
 test('React 外壳与原版保持相同标签、层级、class、属性、内联样式和文字', () => {
@@ -38,13 +42,13 @@ test('React 外壳与原版保持相同标签、层级、class、属性、内联
   expect(container.querySelector('iframe')).toBeNull();
 });
 
-test('仅复用原有 CSS，加载顺序一致，不包含替代样式表', () => {
-  const frontend = new DOMParser().parseFromString(
-    readFileSync('index.html', 'utf8'), 'text/html');
-  const styles = (document: Document) => [...document.querySelectorAll('link[rel="stylesheet"]')]
-    .map(node => node.getAttribute('href'));
-  expect(styles(frontend)).toEqual(styles(original));
-  expect(frontend.querySelector('style')).toBeNull();
+test('公共 CSS 按原顺序进入构建，不再依赖外部样式或全局第三方脚本', () => {
+  const frontend = new DOMParser().parseFromString(readFileSync('index.html', 'utf8'), 'text/html');
+  const entry = readFileSync('src/main.tsx', 'utf8');
+  const styles = [...entry.matchAll(/import '\.\/styles\/([^']+)'/g)].map(match => match[1]);
+  expect(styles).toEqual(['shell.css', 'de-stijl.css', 'components.css', 'motion.css']);
+  expect(frontend.querySelector('link[rel="stylesheet"]')).toBeNull();
+  expect(frontend.querySelector('script[src*="vendor"]')).toBeNull();
 });
 
 test('React 挂载后初始化模块化外壳，卸载清理，不加载旧业务脚本或 HTML 片段', () => {
@@ -58,13 +62,15 @@ test('React 挂载后初始化模块化外壳，卸载清理，不加载旧业�
   expect(document.getElementById('chat-panel')).toBeInTheDocument();
   expect(document.getElementById('de-stijl-canvas')).toBeInTheDocument();
   expect(document.getElementById('fragment-mount')).toBeInTheDocument();
+  expect(services.Canvas).toBeDefined();
   view.unmount();expect(cleanup).toHaveBeenCalledOnce();
+  expect(services.Canvas).toBeUndefined();
 });
 
 test('原有按钮调用原处理函数，并保持链接阻止默认跳转', async () => {
   const user = userEvent.setup();
   const navigate = vi.fn();
-  Object.assign(window, { PanelManager: { navigate } });
+  Object.assign(services, { PanelManager: { navigate } });
   render(<App />);
   await user.click(screen.getByRole('link', { name: '登录/注册' }));
   expect(document.getElementById('auth-modal')).toHaveStyle({display:'flex'});

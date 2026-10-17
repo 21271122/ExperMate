@@ -1,15 +1,19 @@
 import json
 from datetime import datetime as dt
-from flask import Blueprint, request, jsonify, g, Response, stream_with_context
-from lib.agent_v2 import AgentLoop
+
+from flask import Blueprint, Response, g, jsonify, request, stream_with_context
+
 from lib.agent_factory import (
-    get_or_create_agent,
-    build_child_for_thread,
     build_analysis_child,
+    build_child_for_thread,
     build_legacy_child,
+    get_or_create_agent,
 )
+from lib.agent_v2 import AgentLoop
+from routes.api_agent import _serialized_account_run
 
 api_child_bp = Blueprint("api_child", __name__)
+
 
 _MODIFY_MODE_PROMPT = (
     "[修改模式] 你正在修改已完成的实验 {exp_id}。"
@@ -29,6 +33,15 @@ def _run_agent(agent, user_message, created_at=None):
     return result
 
 
+def _child_state(agent):
+    state = agent.state_to_dict()
+    if agent._generated_preview is not None:
+        record = g.exp_repo.load(agent.child.exp_id) or {}
+        g.thread_repo.save_child_state("preview:" + agent.child.exp_id, {
+            "preview": agent._generated_preview, "revision": record.get("revision", 0)})
+    return state
+
+
 def _stream_agent(agent, user_message, created_at, state_key):
     """子 Agent 与主 Agent 使用同样的 SSE 事件格式，末尾持久化子状态。"""
     history_start = len(agent.history)
@@ -37,7 +50,7 @@ def _stream_agent(agent, user_message, created_at, state_key):
         try:
             for event in agent.run_stream(user_message, created_at=created_at):
                 if event.get("event") == "done":
-                    state = agent.state_to_dict()
+                    state = _child_state(agent)
                     if state_key:
                         g.thread_repo.save_child_state(state_key, state)
                     from routes.api_agent import publish_agent_history_resource_changes
@@ -77,7 +90,7 @@ def _migrate_legacy_analysis(anal_id, analysis_data):
 
 
 def _make_analysis_chat_response(agent, result, thread_id):
-    state = agent.state_to_dict()
+    state = _child_state(agent)
     if thread_id:
         g.thread_repo.save_child_state(thread_id, state)
     return jsonify({"ok": True, "state": state,
@@ -109,7 +122,7 @@ def _restore_experiment_child_identity(agent, exp_id, thread_id=None):
 
 
 def _make_chat_response(agent, result, thread_id):
-    state = agent.state_to_dict()
+    state = _child_state(agent)
     key = thread_id or agent.child.exp_id
     if key:
         g.thread_repo.save_child_state(key, state)
@@ -125,6 +138,7 @@ def _make_chat_response(agent, result, thread_id):
 
 
 @api_child_bp.route("/analysis/<anal_id>/chat", methods=["POST"])
+@_serialized_account_run
 def api_analysis_chat(anal_id):
     llm = g.get_agent_llm()
     if not llm:
@@ -137,7 +151,7 @@ def api_analysis_chat(anal_id):
     data = request.get_json() or {}
     user_message = (data.get("message") or "").strip()
     created_at = str(data.get("created_at") or "").strip() or None
-    state_dict = data.get("state")
+    state_dict = None
     wants_stream = bool(data.get("stream"))
 
     idx = g.thread_repo.get_index()
@@ -170,7 +184,7 @@ def api_analysis_chat(anal_id):
                 return _stream_agent(agent, user_message, created_at, thread_id)
             result = _run_agent(agent, user_message, created_at)
             return _make_analysis_chat_response(agent, result, thread_id)
-        state = agent.state_to_dict()
+        state = _child_state(agent)
         g.thread_repo.save_child_state(thread_id, state)
         return jsonify({"ok": True, "state": state})
 
@@ -188,12 +202,13 @@ def api_analysis_chat(anal_id):
             return _stream_agent(agent, user_message, created_at, thread_id)
         result = _run_agent(agent, user_message, created_at)
         return _make_analysis_chat_response(agent, result, thread_id)
-    state = agent.state_to_dict()
+    state = _child_state(agent)
     g.thread_repo.save_child_state(thread_id, state)
     return jsonify({"ok": True, "state": state})
 
 
 @api_child_bp.route("/exp/<exp_id>/chat", methods=["POST"])
+@_serialized_account_run
 def api_exp_chat(exp_id):
     llm = g.get_agent_llm()
     if not llm:
@@ -202,7 +217,7 @@ def api_exp_chat(exp_id):
     data = request.get_json() or {}
     user_message = (data.get("message") or "").strip()
     created_at = str(data.get("created_at") or "").strip() or None
-    state_dict = data.get("state")
+    state_dict = None
     wants_stream = bool(data.get("stream"))
     is_legacy = data.get("is_legacy", False)
 
@@ -215,7 +230,7 @@ def api_exp_chat(exp_id):
             return jsonify({"ok": False, "error": "实验不存在"}), 404
 
         disk_state = g.thread_repo.load_child_state(exp_id)
-        if disk_state and not is_legacy:
+        if disk_state:
             agent = get_or_create_agent(
                 llm=llm, exp_repo=g.exp_repo, state_dict=disk_state,
                 thread_repo=g.thread_repo, update_log_repo=g.update_log_repo,
@@ -228,7 +243,7 @@ def api_exp_chat(exp_id):
                     return _stream_agent(agent, user_message, created_at, exp_id)
                 result = _run_agent(agent, user_message, created_at)
                 return _make_chat_response(agent, result, None)
-            state = agent.state_to_dict()
+            state = _child_state(agent)
             g.thread_repo.save_child_state(exp_id, state)
             return jsonify({"ok": True, "state": state})
 
@@ -291,7 +306,7 @@ def api_exp_chat(exp_id):
                 return _stream_agent(agent, user_message, created_at, thread_id)
             result = _run_agent(agent, user_message, created_at)
             return _make_chat_response(agent, result, thread_id)
-        state = agent.state_to_dict()
+        state = _child_state(agent)
         if thread_id:
             g.thread_repo.save_child_state(thread_id, state)
         return jsonify({"ok": True, "state": state})
@@ -314,38 +329,29 @@ def api_exp_chat(exp_id):
             return _stream_agent(agent, user_message, created_at, thread_id or exp_id)
         result = _run_agent(agent, user_message, created_at)
         return _make_chat_response(agent, result, thread_id)
-    state = agent.state_to_dict()
+    state = _child_state(agent)
     if thread_id:
         g.thread_repo.save_child_state(thread_id, state)
     return jsonify({"ok": True, "state": state})
 
 
 @api_child_bp.route("/exp/<exp_id>/confirm", methods=["POST"])
+@_serialized_account_run
 def api_exp_confirm(exp_id):
-    body = request.get_json()
-    if not body or not isinstance(body, dict):
-        return jsonify({"ok": False, "error": "无效的请求数据"}), 400
-
-    data = body.get("preview") or {}
-    state_dict = body.get("state")
-    if not data or not isinstance(data, dict):
-        return jsonify({"ok": False, "error": "缺少实验数据"}), 400
-
-    old_exp = g.exp_repo.load(exp_id)
-    data["id"] = exp_id
-
-    notes = data.get("original_notes", "")
-    refs = g.experiment_svc.extract_references(notes)
-    old_refs = old_exp.get("references", []) if old_exp else []
-    data["references"] = refs
-
-    thread_id = None
-    if state_dict and isinstance(state_dict, dict):
-        thread_id = state_dict.get("thread_id")
-
-    g.experiment_svc.save_with_log(exp_id, data, "child_agent", thread_id=thread_id)
-    g.exp_repo.save(data)
-    g.experiment_svc.update_referenced_by(exp_id, refs, old_refs=old_refs)
+    old = g.exp_repo.load(exp_id)
+    if not old:
+        return jsonify(ok=False, error="实验不存在"), 404
+    key = "preview:" + exp_id
+    state = g.thread_repo.load_child_state(key) or {}
+    preview = state.get("preview")
+    if not isinstance(preview, dict) or not preview:
+        return jsonify(ok=False, error="预览已失效，请重新生成"), 409
+    data = {**old, **preview, "id": exp_id, "attachments": old.get("attachments", [])}
+    result = g.experiment_svc.save_and_update_refs_if_revision(
+        exp_id, data, state.get("revision", -1), source="child_agent")
+    if not result.get("ok"):
+        return jsonify(ok=False, error="实验已更新，请重新生成预览"), 409
+    g.thread_repo.save_child_state(key, {})
     from routes.api_agent import publish_resource_change
     publish_resource_change(exp_id, "edited", request.headers.get("X-Exdiary-Client-Id", ""))
-    return jsonify({"ok": True, "exp_id": exp_id})
+    return jsonify(ok=True, exp_id=exp_id)

@@ -132,7 +132,7 @@ class AnalysisService:
         meta = self.attachment_store.meta(sha256)
         content = self.attachment_store.get(sha256)
         if not meta or content is None:
-            return {**base, "available": False, "message": "附件不存在或尚未同步到本机"}
+            return {**base, "available": False, "message": "服务端未找到附件内容"}
         name = str(meta.get("name") or "")
         mime = str(meta.get("mime") or "")
         suffix = Path(name).suffix.lower()
