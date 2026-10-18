@@ -5,6 +5,7 @@ import { ChildConversation } from '../experiments/ChildConversation';
 import { DetailAttachments } from '../experiments/DetailAttachments';
 import { FieldView, RecordDocument } from './RecordDocument';
 import { StructureProposal } from './StructureProposal';
+import { RecordHistory } from './RecordHistory';
 import { newId, type RecordValue, type StructureProposal as Proposal } from './model';
 
 export function NewRecord() {
@@ -30,7 +31,7 @@ export function DraftList() {
 export function FlexibleRecord({ initial, draftId }: { initial?: RecordValue; draftId?: string }) {
   const [record, setRecord] = useState<RecordValue | null>(initial || null), [draft, setDraft] = useState<RecordValue | null>(initial || null);
   const [editing, setEditing] = useState(!!draftId), [busy, setBusy] = useState(false), [feedback, setFeedback] = useState(''), [child, setChild] = useState(false);
-  const [proposals, setProposals] = useState<Proposal[]>([]), [revisions, setRevisions] = useState<{ revision: number; title: string }[]>([]);
+  const [proposals, setProposals] = useState<Proposal[]>([]), [history, setHistory] = useState(false);
   const controller = useRef(new AbortController()), mutation = useRef(false);
   const kind = draftId ? 'record-drafts' : 'experiments', id = draftId || initial!.id;
   const base = `/api/v1/${kind}/${encodeURIComponent(id)}`;
@@ -58,18 +59,22 @@ export function FlexibleRecord({ initial, draftId }: { initial?: RecordValue; dr
     await action(async () => {
       const meta = Object.fromEntries(['title', 'date', 'experimenter', 'status', 'tags'].filter(key => key in metadata).map(key => [key, metadata[key]]));
       const body = await requestJson(base + '/operations', { method: 'POST', body: JSON.stringify({ expected_revision: record!.revision, request_id: newId(), document: draft!.document, metadata: meta }) });
-      setRecord(body.data); setDraft(structuredClone(body.data)); setProposals(body.proposals || []); setEditing(false); setFeedback('已保存 · 修订 ' + body.data.revision);
+      setRecord(body.data); setDraft(structuredClone(body.data)); setProposals(body.proposals || []); setEditing(false); setFeedback('已保存 · 版本 ' + (body.data.content_revision ?? body.data.revision));
     });
   }
-  return <div className={`flexible-record${editing ? ' record-is-editing' : ''}`}><div className={`record-controls record-toolbar${editing ? ' record-toolbar-editing' : ''}`}><small>{draftId ? '实验草稿' : record.id} · 修订 {record.revision}</small>{editing && <span className="record-save-indicator">{busy ? '保存中…' : dirty ? '有未保存修改' : '正在编辑'}</span>}
+  return <div className={`flexible-record${editing ? ' record-is-editing' : ''}`}><div className={`record-controls record-toolbar${editing ? ' record-toolbar-editing' : ''}`}><small>{draftId ? `实验草稿 · 修订 ${record.revision}` : `${record.id} · 当前版本 ${record.content_revision ?? record.revision}`}</small>{editing && <span className="record-save-indicator">{busy ? '保存中…' : dirty ? '有未保存修改' : '正在编辑'}</span>}
     {record.published_id && <a href={`/experiments/${record.published_id}`}>已发布，打开实验记录</a>}
-    {!editing && <button type="button" disabled={busy} onClick={() => { setFeedback(''); setEditing(true); }}>编辑</button>}
-    {editing && <><button type="button" disabled={busy || !dirty} onClick={() => void save()}>保存</button><button type="button" disabled={busy} onClick={() => { setDraft(structuredClone(record)); setEditing(false); setFeedback(''); }}>取消编辑</button></>}
+    {!editing && <button type="button" disabled={busy} onClick={() => { setFeedback(''); setHistory(false); setEditing(true); }}>编辑</button>}
+    {editing && <><button type="button" disabled={busy || !dirty} onClick={() => void save()}>保存</button><button type="button" className="outline" disabled={busy} onClick={() => { setDraft(structuredClone(record)); setEditing(false); setFeedback(''); }}>取消编辑</button></>}
     {draftId ? <button type="button" disabled={busy || dirty || proposals.length > 0 || !!record.published_id} onClick={() => void action(async () => { const body = await requestJson(base + '/publish', { method: 'POST', body: JSON.stringify({ expected_revision: record.revision, request_id: 'publish-' + record.id }) }); services.PanelManager?.navigate('/experiments/' + body.data.id); })}>完成整理并保存记录</button>
-      : !editing && <><button type="button" disabled={busy || editing} onClick={() => setChild(old => !old)}>对话编辑</button><button type="button" onClick={() => services.openExperimentPrint?.(id)}>PDF</button><button type="button" disabled={busy || editing} onClick={() => void action(async () => setRevisions((await requestJson(base + '/revisions')).data))}>修改历史</button><button type="button" disabled={busy || editing} onClick={() => void action(async () => { await requestJson(`/experiments/${id}/${record.archived ? 'restore' : 'archive'}`, { method: 'POST', body: JSON.stringify({ expected_revision: record.revision }) }); await reload(); })}>{record.archived ? '恢复归档' : '归档'}</button></>}
+      : !editing && <><button type="button" disabled={busy || editing} onClick={() => setChild(old => !old)}>对话编辑</button><button type="button" onClick={() => services.openExperimentPrint?.(id)}>PDF</button><button type="button" disabled={busy || editing} onClick={() => setHistory(old => !old)}>修改历史</button><button type="button" disabled={busy || editing} onClick={() => void action(async () => { await requestJson(`/experiments/${id}/${record.archived ? 'restore' : 'archive'}`, { method: 'POST', body: JSON.stringify({ expected_revision: record.revision }) }); await reload(); })}>{record.archived ? '恢复归档' : '归档'}</button></>}
   </div>
     {feedback && <div className="flash" role="status">{feedback}{dirty && '（未保存的编辑仍保留在页面中）'}<button type="button" disabled={busy} onClick={() => { if (!dirty || confirm('加载最新内容将放弃当前未保存的编辑，是否继续？')) void action(async () => { await reload(); setEditing(false); }); }}>加载最新内容</button></div>}
-    <div className="record-edit-content" inert={busy} aria-busy={busy}>
+    {history && !draftId && <RecordHistory current={record} locked={busy || editing || child} close={() => setHistory(false)} switchVersion={version => action(async () => {
+      await requestJson(base + '/restore', { method: 'POST', body: JSON.stringify({ revision: version, expected_revision: record.revision, request_id: newId() }) });
+      await reload(); setFeedback('已切换到版本 ' + version + '，历史版本已保留。');
+    })} />}
+    <div className="record-edit-content" hidden={history} inert={busy} aria-busy={busy}>
       {editing ? <section className="record-meta-editor" aria-label="基本信息"><h2>基本信息</h2><div className="record-meta-grid">
         <label className="record-label record-meta-wide">标题<input type="text" value={String(metadata.title || '')} onChange={e => setMeta('title', e.target.value)} /></label>
         <label className="record-label">日期<input type="date" value={String(metadata.date || '')} onChange={e => setMeta('date', e.target.value)} /></label>
@@ -81,10 +86,10 @@ export function FlexibleRecord({ initial, draftId }: { initial?: RecordValue; dr
       {record.original_notes && <details><summary>原始记录</summary><FieldView field={{ id: 'original', label: '原始记录', kind: 'text', presentation: 'text', content: { text: record.original_notes } }} /></details>}
       <RecordDocument value={value.document} change={editing ? document => setDraft(old => old && ({ ...old, document })) : undefined} />
     </div>
-    {!editing && proposals.map(proposal => <StructureProposal key={proposal.id} id={proposal.id} updated={() => void reload()} />)}
-    {revisions.length > 0 && <details open><summary>完整版本历史</summary>{revisions.map(revision => <div key={revision.revision} className="record-controls">修订 {revision.revision} · {revision.title}<button type="button" disabled={busy || editing || revision.revision === record.revision} onClick={() => { if (confirm(`恢复修订 ${revision.revision} 的内容？将保留当前历史并生成新版本。`)) void action(async () => { await requestJson(base + '/restore', { method: 'POST', body: JSON.stringify({ revision: revision.revision, expected_revision: record.revision, request_id: newId() }) }); await reload(); setRevisions([]); }); }}>恢复为新版本</button></div>)}</details>}
+    {!editing && !history && proposals.map(proposal => <StructureProposal key={proposal.id} id={proposal.id} updated={() => void reload()} />)}
+
     {editing && !draftId && <p className="record-note">保存或取消编辑后，可继续管理实验附件。</p>}
-    {!draftId && <div hidden={editing}><DetailAttachments label="附件" expId={id} revision={record.revision} locked={editing || busy || child} onChanged={reload} onConflict={reason => setFeedback((reason as Error).message)} onBusy={setBusy} /></div>}
+    {!draftId && <div hidden={editing || history}><DetailAttachments label="附件" expId={id} revision={record.revision} locked={editing || busy || child} onChanged={reload} onConflict={reason => setFeedback((reason as Error).message)} onBusy={setBusy} /></div>}
     {child && <ChildConversation expId={id} updated={() => { setChild(false); void reload(); }} />}
   </div>;
 }

@@ -55,6 +55,8 @@ class RecordDocumentService:
                 value['document'] = legacy_document(value)
         else: raise RecordError('invalid_target', 422)
         if value is None: raise RecordError('not_found', 404)
+        if kind == 'experiment':
+            value['content_revision'] = self.storage.content_revision(target_id, value['revision'])
         return value
 
     def _current(self, kind, target_id, revision):
@@ -209,13 +211,48 @@ class RecordDocumentService:
         return self._request(request_id, ['publish', draft_id, revision], work)
 
     def revisions(self, exp_id):
-        self.get('experiment', exp_id)
-        return self.storage.revisions(exp_id)
+        current = self.get('experiment', exp_id)
+        values = self.storage.revisions(exp_id)
+        # 旧入口的附件或归档操作也会推进并发修订号；尚未留快照的当前状态允许先查看。
+        if not self.storage.snapshot(exp_id, current['revision']): values.insert(0, current)
+        return values
+
+    def revision(self, exp_id, revision):
+        current = self.get('experiment', exp_id)
+        snapshot = self.storage.snapshot(exp_id, revision)
+        if snapshot is None and revision == current['revision']: snapshot = current
+        if snapshot is None: raise RecordError('not_found', 404)
+        return {**snapshot, 'document': snapshot.get('document') or legacy_document(snapshot)}
 
     def restore(self, exp_id, old_revision, revision, request_id):
-        self.get('experiment', exp_id)
-        snapshot = self.storage.snapshot(exp_id, old_revision)
-        if not snapshot: raise RecordError('not_found', 404)
-        document = snapshot.get('document') or legacy_document(snapshot)
-        return self.update('experiment', exp_id, revision, document,
-                           {key: snapshot[key] for key in META_FIELDS if key in snapshot}, request_id, manual=True)
+        if type(old_revision) is not int or old_revision < 0: raise RecordError('invalid_revision', 422)
+        def work():
+            current = self._current('experiment', exp_id, revision)
+            snapshot = self.revision(exp_id, old_revision)
+            target_revision = snapshot['revision']
+            if current['content_revision'] == target_revision: return current
+            document = self._validate(snapshot['document'])
+            links = snapshot.get('attachments', [])
+            if any(not isinstance(item, dict) or not item.get('sha256') or not self.attachments or not self.attachments.meta(item['sha256']) for item in links):
+                raise RecordError('attachment_not_accessible', 422)
+            if not self.storage.snapshot(exp_id, current['revision']): self._save_snapshot(current)
+            values = {**{key: snapshot[key] for key in META_FIELDS if key in snapshot},
+                      'format_version': 2, 'document_json': encode(document),
+                      'summary_text': document_text(document)[:200], 'search_text': document_text(document),
+                      'original_notes': snapshot.get('original_notes', ''), 'updated_at': timestamp(),
+                      'attachments': encode(self._document_links(document, links)),
+                      'references': encode(list(dict.fromkeys(source['reference'] for source in document['sources'] if source['kind'] == 'experiment')))}
+            assignments = ','.join(f'"{key}"=?' for key in values)
+            parameters = [encode(value) if key == 'tags' else value for key, value in values.items()]
+            cursor = self.db.execute(f'UPDATE experiments SET {assignments},revision=revision+1 WHERE id=? AND user_id=? AND revision=?',
+                                     [*parameters, exp_id, self.uid(), revision])
+            if cursor.rowcount != 1: raise RecordError('revision_conflict')
+            # 切换只记录并发修订到既有内容版本的映射，不复制一份内容快照。
+            self.storage.link_revision(exp_id, revision + 1, target_revision)
+            for proposal in self.storage.proposals_for('experiment', exp_id):
+                proposal.update(status='superseded', resolved_at=timestamp())
+                self.storage.save_proposal(proposal)
+            self.logs.append(exp_id, 'version_switch', [{'path': 'content_revision', 'field': '当前版本',
+                                                       'old': current['content_revision'], 'new': target_revision}])
+            return self.get('experiment', exp_id)
+        return self._request(request_id, ['switch_version', exp_id, old_revision, revision], work)

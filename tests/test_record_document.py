@@ -9,6 +9,72 @@ from lib.core.record_document import empty_document, structure_signature, valida
 from lib.repositories.sqlite_common import ThreadSafeConnection
 from lib.repositories.sqlite_experiment import SqliteExperimentRepository
 from lib.repositories.sqlite_update_log import SqliteUpdateLogRepository
+from lib.core.record_diff import summarize_changes
+
+
+def test_proposal_summary_uses_ids_and_reports_moves_types_content_and_sources():
+    before = sample_document()
+    before['sections'][0]['fields'].append({'id': 'removed', 'label': '旧字段', 'kind': 'text',
+                                            'content': {'text': '不能静默删除的记录'}})
+    before = validate_document(before)
+    after = deepcopy(before)
+    field = after['sections'][0]['fields'].pop(0)
+    field.update(label='实验目的', note='新增备注')
+    field['content']['text'] = '新的记录'
+    after['sections'][1]['fields'].append(field)
+    after['sections'][0]['fields'] = [{'id': 'added', 'label': '旧字段', 'kind': 'formula',
+                                     'content': {'latex': 'm=cVM'}}]
+    after = validate_document(after)
+    original = deepcopy((before, after))
+    summary = summarize_changes(before, after)
+    kinds = [change['kind'] for change in summary['changes']]
+    assert kinds == ['field_removed', 'field_added', 'field_renamed', 'field_moved', 'content_changed', 'note_changed']
+    assert summary['changes'][0]['review_content'] and summary['changes'][0]['warning']
+    assert '实验条件' in summary['changes'][3]['message'] and '实验过程' in summary['changes'][3]['message']
+    assert summarize_changes(before, after) == summary
+    assert (before, after) == original
+    assert summarize_changes(before, before) == {'changes': []}
+
+
+def test_proposal_summary_table_columns_and_reorder_do_not_confuse_added_positions():
+    before = empty_document()
+    before['sections'][0]['fields'] = [{'id': 'table', 'label': '药品', 'kind': 'table', 'content': {
+        'columns': [{'id': key, 'label': key} for key in ['a', 'b', 'c']],
+        'rows': [{'id': 'r1', 'cells': {'a': '水', 'b': '10 mL'}}]}}]
+    before = validate_document(before)
+    after = deepcopy(before)
+    columns = after['sections'][0]['fields'][0]['content']['columns']
+    columns[:] = [columns[2], columns[0], {'id': 'd', 'label': '新增列', 'type': 'text'}]
+    columns[1].update(label='名称', type='number')
+    del after['sections'][0]['fields'][0]['content']['rows'][0]['cells']['b']
+    changes = summarize_changes(before, after)['changes']
+    assert {c['kind'] for c in changes} == {'column_removed', 'column_added', 'column_renamed', 'column_type_changed', 'columns_reordered', 'content_changed'}
+    removed = next(c for c in changes if c['kind'] == 'column_removed')
+    assert '1 个原有非空单元格' in removed['message'] and removed['warning']
+    after = deepcopy(before)
+    after['sections'][0]['fields'][0]['content']['columns'].insert(0, {'id': 'new', 'label': '新列', 'type': 'text'})
+    assert [c['kind'] for c in summarize_changes(before, after)['changes']] == ['column_added']
+
+
+def test_proposal_summary_field_order_type_and_nonsemantic_layout():
+    before = sample_document()
+    before['sections'][0]['fields'].append({**deepcopy(before['sections'][0]['fields'][0]), 'id': 'second'})
+    after = deepcopy(before)
+    after['sections'][0]['fields'].reverse()
+    assert [c['kind'] for c in summarize_changes(before, after)['changes']] == ['fields_reordered']
+    after['sections'][0]['fields'][0].update(kind='formula', presentation='formula', content={'latex': 'x'})
+    changed = next(c for c in summarize_changes(before, after)['changes'] if c['kind'] == 'field_type_changed')
+    assert changed['warning'] and changed['review_content']
+    graph = empty_document()
+    graph['sections'][1]['fields'] = [{'id': 'flow', 'label': '流程', 'kind': 'process', 'content': {
+        'nodes': [{'id': 'a', 'label': '水'}], 'actions': [], 'layout': {}}}]
+    graph = validate_document(graph)
+    positioned = deepcopy(graph)
+    positioned['sections'][1]['fields'][0]['content']['layout'] = {'a': {'x': 10, 'y': 20}}
+    assert summarize_changes(graph, positioned) == {'changes': []}
+    positioned['sources'] = [{'id': 's', 'kind': 'message', 'reference': 'm1'}]
+    positioned['sections'][1]['fields'][0]['source_refs'] = ['s']
+    assert {c['kind'] for c in summarize_changes(graph, positioned)['changes']} == {'field_sources_changed', 'sources_changed'}
 
 
 def sample_document():
@@ -137,7 +203,7 @@ def test_failed_proposal_application_rolls_back_every_write(records, monkeypatch
     assert conn.execute('SELECT count(*) FROM update_logs').fetchone()[0] == 0
 
 
-def test_old_write_cannot_overwrite_v2_and_restore_creates_new_revision(records):
+def test_version_switch_keeps_snapshots_and_monotonic_concurrency_revision(records):
     from lib.services.record_document import RecordError
     service, repo, _, _ = records
     draft = service.create_draft({})
@@ -148,10 +214,81 @@ def test_old_write_cannot_overwrite_v2_and_restore_creates_new_revision(records)
     assert len(service.revisions(published['id'])) == 2
     restored = service.restore(published['id'], 1, 2, 'restore')
     assert restored['revision'] == 3
+    assert restored['content_revision'] == 1
+    assert len(service.revisions(published['id'])) == 2
     assert restored['document'] == published['document']
     with pytest.raises(ValueError, match='V2'): repo.save({'id': published['id'], 'title': '旧入口'})
     with pytest.raises(RecordError, match='revision_conflict'):
         service.update('experiment', published['id'], 1, doc, {}, 'stale')
+
+
+def test_version_switch_round_trip_edit_reference_and_account_scope(records):
+    from lib.services.record_document import RecordError
+    service, _, _, owner = records
+    draft = service.create_draft({'title': '第一版'})
+    service.resolve(service.propose('draft', draft['id'], 1, sample_document())['id'], 'approved')
+    first = service.publish(draft['id'], 2, 'publish-history')
+    doc = deepcopy(first['document']); doc['sections'][0]['fields'][0]['content']['text'] = '第二版内容'
+    second = service.update('experiment', first['id'], 1, doc, {'title': '第二版'}, 'edit-history')
+    switched = service.restore(first['id'], 1, 2, 'switch-one')
+    assert switched['title'] == '第一版' and switched['content_revision'] == 1
+    assert service.restore(first['id'], 1, 2, 'switch-one') == switched
+    with pytest.raises(RecordError, match='request_id_reused'):
+        service.restore(first['id'], 2, 2, 'switch-one')
+    with pytest.raises(RecordError, match='revision_conflict'):
+        service.update('experiment', first['id'], 2, doc, {}, 'stale-history')
+    assert service.revision(first['id'], 2)['document'] == second['document']
+    # 并发修订 3 是内容版本 1 的别名，历史引用仍能找到当时的内容。
+    assert service.storage.snapshot(first['id'], 3)['document'] == first['document']
+    round_trip = service.restore(first['id'], 2, 3, 'switch-two')
+    assert round_trip['content_revision'] == 2 and round_trip['revision'] == 4
+    assert len(service.revisions(first['id'])) == 2
+    edited = service.update('experiment', first['id'], 4, doc, {'title': '之后的新编辑'}, 'after-switch')
+    assert edited['revision'] == 5
+    assert [item['revision'] for item in service.revisions(first['id'])] == [5, 2, 1]
+    assert service.restore(first['id'], 1, 5, 'back-again')['content_revision'] == 1
+    owner[0] = 'other-account'
+    with pytest.raises(RecordError, match='not_found'): service.revision(first['id'], 1)
+    with pytest.raises(RecordError, match='not_found'): service.restore(first['id'], 1, 6, 'foreign-switch')
+
+
+def test_version_switch_is_atomic_and_supersedes_pending_proposals(records, monkeypatch):
+    service, _, conn, _ = records
+    draft = service.create_draft({})
+    first = service.publish(draft['id'], 1, 'publish-atomic')
+    service.update('experiment', first['id'], 1, empty_document(), {'title': '第二版'}, 'second-atomic')
+    proposal = service.propose('experiment', first['id'], 2, sample_document())
+    original = service.storage.link_revision
+    def fail(*args): raise RuntimeError('link failure')
+    monkeypatch.setattr(service.storage, 'link_revision', fail)
+    with pytest.raises(RuntimeError, match='link failure'):
+        service.restore(first['id'], 1, 2, 'switch-failed')
+    assert service.get('experiment', first['id'])['title'] == '第二版'
+    assert service.get('experiment', first['id'])['revision'] == 2
+    assert service.proposal(proposal['id'])['status'] == 'pending'
+    assert conn.execute('SELECT count(*) FROM experiment_revision_links').fetchone()[0] == 0
+    monkeypatch.setattr(service.storage, 'link_revision', original)
+    service.restore(first['id'], 1, 2, 'switch-success')
+    assert service.proposal(proposal['id'])['status'] == 'superseded'
+
+
+def test_version_switch_restores_legacy_metadata_notes_and_attachment_links(records):
+    from types import SimpleNamespace
+    service, repo, conn, _ = records
+    sha = 'a' * 64
+    service.attachments = SimpleNamespace(meta=lambda key: {'name': 'old.txt', 'mime': 'text/plain'} if key == sha else None)
+    exp_id = repo.save({'id': 'OLD-1', 'title': '原始标题', 'original_notes': '原始笔记', 'tags': ['旧标签'],
+                       'attachments': [{'sha256': sha, 'name': 'old.txt'}]})
+    old = repo.load(exp_id)
+    service.update('experiment', exp_id, old['revision'], sample_document(), {'title': '新版标题'}, 'upgrade-history', manual=True)
+    conn.execute("UPDATE experiments SET original_notes='新的笔记',attachments='[]',archived=1,revision=revision+1 WHERE id=?", (exp_id,))
+    current = service.get('experiment', exp_id)
+    preview = service.revision(exp_id, old['revision'])
+    assert preview['document']['format_version'] == 2
+    result = service.restore(exp_id, old['revision'], current['revision'], 'switch-legacy')
+    assert result['title'] == '原始标题' and result['original_notes'] == '原始笔记'
+    assert result['tags'] == ['旧标签'] and result['attachments'][0]['sha256'] == sha
+    assert result['archived']  # 归档是当前管理状态，不随正文历史切换。
 
 
 def test_http_structure_approval_and_legacy_write_guard(tmp_path):
@@ -165,6 +302,13 @@ def test_http_structure_approval_and_legacy_write_guard(tmp_path):
         draft = client.post('/api/v1/record-drafts', json={'metadata': {'title': '晚间整理'}}).json['data']
         proposal = client.post(f"/api/v1/record-drafts/{draft['id']}/structure-proposals", json={
             'expected_revision': 1, 'document': sample_document()}).json['data']
+        assert [c['kind'] for c in proposal['change_summary']['changes']] == ['field_added']
+        loaded = client.get(f"/api/v1/structure-proposals/{proposal['id']}").json['data']
+        assert loaded['change_summary'] == proposal['change_summary']
+        assert loaded['hash'] == proposal['hash']
+        forged = client.post(f"/api/v1/record-drafts/{draft['id']}/structure-proposals", json={
+            'expected_revision': 1, 'document': sample_document(), 'change_summary': {'changes': []}})
+        assert forged.status_code == 422
         endpoint = f"/api/v1/structure-proposals/{proposal['id']}/resolve"
         data = {'decision': 'approved', 'proposal_hash': 'wrong', 'base_revision': 1}
         assert client.post(endpoint, json=data).status_code == 409
@@ -177,6 +321,20 @@ def test_http_structure_approval_and_legacy_write_guard(tmp_path):
         bad = client.post(f"/api/v1/experiments/{published['id']}/operations", json={
             'expected_revision': 1, 'request_id': 'invalid', 'document': {'sections': []}})
         assert bad.status_code == 422 and bad.json['error']['code'] == 'invalid_document'
+        exp_id = published['id']
+        modified = deepcopy(sample_document())
+        modified['sections'][0]['fields'][0]['content']['text'] = '新版本内容'
+        client.post(f'/api/v1/experiments/{exp_id}/operations', json={
+            'expected_revision': 1, 'request_id': 'history-edit', 'document': modified})
+        preview = client.get(f'/api/v1/experiments/{exp_id}/revisions/1').json['data']
+        assert preview['document'] == sample_document()
+        switched = client.post(f'/api/v1/experiments/{exp_id}/restore', json={
+            'revision': 1, 'expected_revision': 2, 'request_id': 'history-switch'}).json['data']
+        assert switched['content_revision'] == 1 and switched['revision'] == 3
+        versions = client.get(f'/api/v1/experiments/{exp_id}/revisions').json['data']
+        assert len(versions) == 2
+        assert next(v for v in versions if v['is_current'])['revision'] == 1
+        assert all('summary' in v for v in versions)
     finally: app.extensions['exdiary_ctx'].shutdown()
 
 

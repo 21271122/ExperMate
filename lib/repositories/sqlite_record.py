@@ -21,6 +21,9 @@ class SqliteRecordRepository(UserScopeMixin):
         db.execute('''CREATE TABLE IF NOT EXISTS experiment_revisions (
             user_id TEXT NOT NULL, exp_id TEXT NOT NULL, revision INTEGER NOT NULL,
             data TEXT NOT NULL, PRIMARY KEY(user_id,exp_id,revision))''')
+        db.execute('''CREATE TABLE IF NOT EXISTS experiment_revision_links (
+            user_id TEXT NOT NULL, exp_id TEXT NOT NULL, revision INTEGER NOT NULL,
+            version_revision INTEGER NOT NULL, PRIMARY KEY(user_id,exp_id,revision))''')
         db.execute('''CREATE TABLE IF NOT EXISTS record_requests (
             user_id TEXT NOT NULL, request_id TEXT NOT NULL, fingerprint TEXT NOT NULL,
             result TEXT NOT NULL, PRIMARY KEY(user_id,request_id))''')
@@ -61,9 +64,19 @@ class SqliteRecordRepository(UserScopeMixin):
                 and value['target_id'] == target_id and value['status'] == 'pending']
 
     def snapshot(self, exp_id, revision):
+        revision = self.content_revision(exp_id, revision)
         row = self.db.execute('SELECT data FROM experiment_revisions WHERE user_id=? AND exp_id=? AND revision=?',
                               (self._uid(), exp_id, revision)).fetchone()
         return json.loads(row[0]) if row else None
+
+    def content_revision(self, exp_id, revision):
+        row = self.db.execute('SELECT version_revision FROM experiment_revision_links WHERE user_id=? AND exp_id=? AND revision=?',
+                              (self._uid(), exp_id, revision)).fetchone()
+        return row[0] if row else revision
+
+    def link_revision(self, exp_id, revision, version_revision):
+        self.db.execute('INSERT INTO experiment_revision_links (user_id,exp_id,revision,version_revision) VALUES (?,?,?,?)',
+                        (self._uid(), exp_id, revision, version_revision))
 
     def revisions(self, exp_id):
         rows = self.db.execute('SELECT data FROM experiment_revisions WHERE user_id=? AND exp_id=? ORDER BY revision DESC',

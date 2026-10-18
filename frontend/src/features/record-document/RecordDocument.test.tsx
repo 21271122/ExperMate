@@ -14,7 +14,7 @@ test('三板块编辑允许一层字段、表格行列和直接内容修改', ()
   render(<Editor />);
   fireEvent.click(screen.getAllByText('添加字段')[0]);
   fireEvent.click(screen.getAllByRole('button', { name: '＋表格字段' })[0]);
-  fireEvent.click(screen.getByText('字段设置'));
+  fireEvent.click(screen.getAllByText('字段设置')[0]);
   fireEvent.change(screen.getByLabelText('字段名称'), { target: { value: '药品列表' } });
   fireEvent.click(screen.getByRole('button', { name: '添加行' }));
   fireEvent.change(screen.getByLabelText('名称'), { target: { value: '乙醇' } });
@@ -24,20 +24,20 @@ test('三板块编辑允许一层字段、表格行列和直接内容修改', ()
   expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(3);
 });
 
-test('切换字段编辑保留未保存内容，默认显示预览并收起结构设置', () => {
+test('进入编辑后所有字段可直接修改，仅结构设置默认收起', () => {
   function Editor() {
     const [value, setValue] = useState<DocumentData>({ format_version: 2, sections: [{ id: 'conditions', fields: [{ ...newField('text'), id: 'a', label: '目的' }, { ...newField('text'), id: 'b', label: '备注说明' }] }, { id: 'process', fields: [] }, { id: 'results', fields: [] }], sources: [] });
     return <RecordDocument value={value} change={setValue} />;
   }
   render(<Editor />);
-  expect(screen.queryByRole('textbox')).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: '编辑目的' }));
-  expect(screen.getByText('字段设置').closest('details')).not.toHaveAttribute('open');
+  expect(screen.getByLabelText('目的内容')).toBeVisible();
+  expect(screen.getByLabelText('备注说明内容')).toBeVisible();
+  expect(screen.queryByRole('button', { name: /编辑内容|收起编辑/ })).toBeNull();
+  screen.getAllByText('字段设置').forEach(summary => expect(summary.closest('details')).not.toHaveAttribute('open'));
   fireEvent.change(screen.getByLabelText('目的内容'), { target: { value: '测量不同浓度的影响' } });
-  fireEvent.click(screen.getByRole('button', { name: '编辑备注说明' }));
-  expect(screen.getByText('测量不同浓度的影响')).toBeVisible();
-  fireEvent.click(screen.getByRole('button', { name: '编辑目的' }));
+  fireEvent.change(screen.getByLabelText('备注说明内容'), { target: { value: '保留完整记录' } });
   expect(screen.getByLabelText('目的内容')).toHaveValue('测量不同浓度的影响');
+  expect(screen.getByLabelText('备注说明内容')).toHaveValue('保留完整记录');
 });
 
 test('选择流程图动作修改共享参数，切换物质后仍保留并更新预览', () => {

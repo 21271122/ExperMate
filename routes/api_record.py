@@ -3,8 +3,15 @@ from flask import Blueprint, g, jsonify, request
 from pydantic import ValidationError
 
 from lib.services.record_document import RecordError
+from lib.core.record_diff import summarize_changes
+from lib.services.record_projection import document_text, legacy_document
 
 api_record_bp = Blueprint('api_record', __name__)
+
+
+def proposal_payload(proposal):
+    # 摘要只从已保存的前后正文派生，不接受调用方提交，也不改变批准绑定的哈希。
+    return {**proposal, 'change_summary': summarize_changes(proposal['before'], proposal['document'])}
 
 
 @api_record_bp.before_request
@@ -83,12 +90,12 @@ def operations(kind, target_id):
 @api_record_bp.post('/experiments/<target_id>/structure-proposals', defaults={'kind': 'experiment'})
 def propose(kind, target_id):
     data = body(('expected_revision', 'document'))
-    return jsonify(data=g.record_svc.propose(kind, target_id, data['expected_revision'], data['document'])), 201
+    return jsonify(data=proposal_payload(g.record_svc.propose(kind, target_id, data['expected_revision'], data['document']))), 201
 
 
 @api_record_bp.get('/structure-proposals/<proposal_id>')
 def get_proposal(proposal_id):
-    return jsonify(data=g.record_svc.proposal(proposal_id))
+    return jsonify(data=proposal_payload(g.record_svc.proposal(proposal_id)))
 
 
 @api_record_bp.post('/structure-proposals/<proposal_id>/resolve')
@@ -112,16 +119,17 @@ def publish(target_id):
 
 @api_record_bp.get('/experiments/<exp_id>/revisions')
 def revisions(exp_id):
+    current = g.record_svc.get('experiment', exp_id)
     return jsonify(data=[{'revision': item['revision'], 'updated_at': item.get('updated_at', ''),
-                          'title': item.get('title', '')} for item in g.record_svc.revisions(exp_id)])
+                          'title': item.get('title', ''), 'date': item.get('date', ''),
+                          'is_current': item['revision'] == current['content_revision'],
+                          'summary': document_text(item.get('document') or legacy_document(item))[:180]}
+                         for item in g.record_svc.revisions(exp_id)])
 
 
 @api_record_bp.get('/experiments/<exp_id>/revisions/<int:revision>')
 def revision(exp_id, revision):
-    g.record_svc.get('experiment', exp_id)
-    snapshot = g.record_svc.storage.snapshot(exp_id, revision)
-    if snapshot is None: raise RecordError('not_found', 404)
-    return jsonify(data=snapshot)
+    return jsonify(data=g.record_svc.revision(exp_id, revision))
 
 
 @api_record_bp.post('/experiments/<exp_id>/restore')

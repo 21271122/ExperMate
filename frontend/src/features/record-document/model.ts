@@ -13,8 +13,9 @@ export type RecordField = Base & (
   { kind: 'assets'; presentation: 'gallery' | 'files'; content: { items: { sha256: string; caption: string }[] } }
 );
 export type RecordDocument = { format_version: 2; sections: { id: 'conditions' | 'process' | 'results'; fields: RecordField[] }[]; sources: Source[] };
-export type RecordValue = { id: string; revision: number; document: RecordDocument; metadata?: Record<string, unknown>; title?: string; date?: string; experimenter?: string; status?: string; original_notes?: string; archived?: boolean; format_version?: number; published_id?: string | null };
-export type StructureProposal = { id: string; target_kind: 'draft' | 'experiment'; target_id: string; base_revision: number; hash: string; status: string; document: RecordDocument; before: RecordDocument };
+export type RecordValue = { id: string; revision: number; content_revision?: number; document: RecordDocument; metadata?: Record<string, unknown>; title?: string; date?: string; experimenter?: string; status?: string; original_notes?: string; archived?: boolean; format_version?: number; published_id?: string | null };
+export type ProposalChange = { kind: string; message: string; field_id: string | null; warning: boolean; review_content: boolean };
+export type StructureProposal = { id: string; target_kind: 'draft' | 'experiment'; target_id: string; base_revision: number; hash: string; status: string; document: RecordDocument; before: RecordDocument; change_summary?: { changes: ProposalChange[] } };
 export const sectionLabels = { conditions: '实验条件', process: '实验过程', results: '结果与分析' };
 export const fieldLabels = { text: '文本', table: '表格', process: '流程图', formula: '公式', assets: '附件' };
 export const newId = () => crypto.randomUUID().replaceAll('-', '');
