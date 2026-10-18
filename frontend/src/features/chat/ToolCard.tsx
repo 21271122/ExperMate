@@ -3,8 +3,9 @@ import { markdown } from '../../shared/markdown';
 import { services } from '../../runtime/services';
 import { SelectorCard } from './SelectorCard';
 import type { ToolActions, ToolResult } from './tool-model';
+import { StructureProposal } from '../record-document/StructureProposal';
 
-const cardDisplays = new Set(['diff', 'answer', 'report', 'analysis_done', 'record_generated', 'music_control', 'list', 'selector']);
+const cardDisplays = new Set(['diff', 'answer', 'report', 'analysis_done', 'record_generated', 'music_control', 'list', 'selector', 'structure_proposal']);
 export const hasToolCard = (result?: ToolResult) => cardDisplays.has(result?.display || '')
   && (result?.display !== 'diff' || !!result.changes?.length)
   && (result?.display !== 'list' || !!result.experiments?.length);
@@ -42,8 +43,9 @@ export function ToolCard({ result, historical, animate, toolCallId, api }: {
   if (!result) return null;
   const frame = { animate };
   switch (result.display) {
+    case 'structure_proposal': return result.proposal_id ? <StructureProposal id={result.proposal_id} updated={() => { api.setSending(false); api.send('字段方案已处理，请继续整理。'); }} /> : null;
     case 'selector': return <SelectorCard result={result} historical={historical} animate={animate} toolCallId={toolCallId} api={api} />;
-    case 'diff': return result.changes?.length ? <Frame {...frame} variant="diff" title="Modified Experiment">{result.changes.map((change, index) => <div className="diff-row" key={index}>
+    case 'diff': return result.changes?.length ? <Frame {...frame} variant="diff" title={result.target_kind === 'draft' ? '草稿已保存' : '修改已保存'}>{result.changes.map((change, index) => <div className="diff-row" key={index}>
       <span className="df">{change.exp_id ? `${change.exp_id} · ` : ''}{change.field || ''}</span>{' '}<span className="do">{change.old || ''}</span>{' → '}<span className="dn">{change.new || ''}</span>
     </div>)}</Frame> : null;
     case 'answer': return <Frame {...frame} variant="answer" title={`Q: ${result.question || ''}`} footer={<>Source: {result.source === 'file' ? 'Confirmed from file' : 'Conversation memory'}{result.exp_ids?.map(id => <Fragment key={id}>{' '}<a href={`/experiments/${encodeURIComponent(id)}`}>{id}</a></Fragment>)}</>}><p>{result.answer || ''}</p></Frame>;

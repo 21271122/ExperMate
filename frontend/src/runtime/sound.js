@@ -11,36 +11,36 @@ export function initializeSound(scope) {
   var bgmAudio = null, bgmIndex = -1, bgmFading = null, bgmQueue = [];
   var bgmLoading = false, bgmNeedsAdvance = false;
   var bgmTracks = [
-    { title: "帕赫贝尔《D大调卡农》", src: "/ai-shell/static/audio/classical/canon-in-d.ogg" },
-    { title: "巴赫《C大调前奏曲》", src: "/ai-shell/static/audio/classical/bach-prelude-c-major.ogg" },
-    { title: "巴赫《哥德堡变奏曲》咏叹调", src: "/ai-shell/static/audio/classical/bach-goldberg-aria.ogg" },
-    { title: "巴赫《羊儿可以安静地吃草》", src: "/ai-shell/static/audio/classical/bach-sheep-may-safely-graze.ogg" },
-    { title: "巴赫《G弦上的咏叹调》", src: "/ai-shell/static/audio/classical/bach-air-on-g-string.ogg" },
-    { title: "巴赫《耶稣，世人仰望的喜悦》", src: "/ai-shell/static/audio/classical/bach-jesu-joy.ogg" },
-    { title: "亨德尔《萨拉班德》HWV 437", src: "/ai-shell/static/audio/classical/handel-sarabande.ogg" },
-    { title: "维瓦尔第《春》第二乐章 Largo", src: "/ai-shell/static/audio/classical/vivaldi-spring-largo.ogg" },
-    { title: "维瓦尔第《夏》第二乐章 Adagio", src: "/ai-shell/static/audio/classical/vivaldi-summer-adagio.ogg" },
-    { title: "维瓦尔第《秋》第二乐章 Adagio molto", src: "/ai-shell/static/audio/classical/vivaldi-autumn-adagio.ogg" },
-    { title: "维瓦尔第《冬》第二乐章 Largo", src: "/ai-shell/static/audio/classical/vivaldi-winter-largo.ogg" },
-    { title: "莫扎特《A大调钢琴协奏曲》K.488 第二乐章", src: "/ai-shell/static/audio/classical/mozart-k488-adagio.ogg" },
-    { title: "莫扎特《A大调单簧管协奏曲》K.622 第二乐章", src: "/ai-shell/static/audio/classical/mozart-clarinet-concerto-adagio.ogg" },
-    { title: "莫扎特《小夜曲》K.525（含第二乐章 Romanze）", src: "/ai-shell/static/audio/classical/mozart-k525-romanze.ogg" },
-    { title: "贝多芬《致爱丽丝》", src: "/ai-shell/static/audio/classical/beethoven-fur-elise.ogg" },
-    { title: "贝多芬《月光奏鸣曲》第一乐章", src: "/ai-shell/static/audio/classical/beethoven-moonlight-sonata.ogg" },
-    { title: "贝多芬《悲怆奏鸣曲》第二乐章", src: "/ai-shell/static/audio/classical/beethoven-pathetique-adagio.ogg" },
-    { title: "舒伯特《小夜曲》D.889", src: "/ai-shell/static/audio/classical/schubert-serenade.ogg" },
-    { title: "舒伯特《即兴曲》Op.90 No.3", src: "/ai-shell/static/audio/classical/schubert-impromptu-op90-3.ogg" },
-    { title: "肖邦《升C小调夜曲（遗作）》", src: "/ai-shell/static/audio/classical/chopin-nocturne-c-sharp-minor.ogg" },
-    { title: "肖邦《降E大调夜曲》Op.9 No.2", src: "/ai-shell/static/audio/classical/chopin-nocturne-op9-2.ogg" },
-    { title: "肖邦《E小调前奏曲》Op.28 No.4", src: "/ai-shell/static/audio/classical/chopin-prelude-op28-4.ogg" },
-    { title: "肖邦《A小调圆舞曲（遗作）》", src: "/ai-shell/static/audio/classical/chopin-waltz-a-minor.ogg" },
-    { title: "门德尔松《威尼斯船歌》Op.30 No.6", src: "/ai-shell/static/audio/classical/mendelssohn-venetian-gondola-song.ogg" },
-    { title: "勃拉姆斯《摇篮曲》Op.49 No.4", src: "/ai-shell/static/audio/classical/brahms-lullaby.ogg" },
-    { title: "德彪西《月光》", src: "/ai-shell/static/audio/classical/clair-de-lune.ogg" },
-    { title: "德彪西《梦》", src: "/ai-shell/static/audio/classical/debussy-reverie.ogg" },
-    { title: "萨蒂《裸体舞曲》第一首", src: "/ai-shell/static/audio/classical/gymnopedie-1.ogg" },
-    { title: "萨蒂《玄秘曲》第一首", src: "/ai-shell/static/audio/classical/satie-gnossienne-1.ogg" },
-    { title: "柴可夫斯基《六月·船歌》", src: "/ai-shell/static/audio/classical/tchaikovsky-june-barcarolle.ogg" }
+    { title: "帕赫贝尔《D大调卡农》", src: "/app/audio/classical/canon-in-d.ogg" },
+    { title: "巴赫《C大调前奏曲》", src: "/app/audio/classical/bach-prelude-c-major.ogg" },
+    { title: "巴赫《哥德堡变奏曲》咏叹调", src: "/app/audio/classical/bach-goldberg-aria.ogg" },
+    { title: "巴赫《羊儿可以安静地吃草》", src: "/app/audio/classical/bach-sheep-may-safely-graze.ogg" },
+    { title: "巴赫《G弦上的咏叹调》", src: "/app/audio/classical/bach-air-on-g-string.ogg" },
+    { title: "巴赫《耶稣，世人仰望的喜悦》", src: "/app/audio/classical/bach-jesu-joy.ogg" },
+    { title: "亨德尔《萨拉班德》HWV 437", src: "/app/audio/classical/handel-sarabande.ogg" },
+    { title: "维瓦尔第《春》第二乐章 Largo", src: "/app/audio/classical/vivaldi-spring-largo.ogg" },
+    { title: "维瓦尔第《夏》第二乐章 Adagio", src: "/app/audio/classical/vivaldi-summer-adagio.ogg" },
+    { title: "维瓦尔第《秋》第二乐章 Adagio molto", src: "/app/audio/classical/vivaldi-autumn-adagio.ogg" },
+    { title: "维瓦尔第《冬》第二乐章 Largo", src: "/app/audio/classical/vivaldi-winter-largo.ogg" },
+    { title: "莫扎特《A大调钢琴协奏曲》K.488 第二乐章", src: "/app/audio/classical/mozart-k488-adagio.ogg" },
+    { title: "莫扎特《A大调单簧管协奏曲》K.622 第二乐章", src: "/app/audio/classical/mozart-clarinet-concerto-adagio.ogg" },
+    { title: "莫扎特《小夜曲》K.525（含第二乐章 Romanze）", src: "/app/audio/classical/mozart-k525-romanze.ogg" },
+    { title: "贝多芬《致爱丽丝》", src: "/app/audio/classical/beethoven-fur-elise.ogg" },
+    { title: "贝多芬《月光奏鸣曲》第一乐章", src: "/app/audio/classical/beethoven-moonlight-sonata.ogg" },
+    { title: "贝多芬《悲怆奏鸣曲》第二乐章", src: "/app/audio/classical/beethoven-pathetique-adagio.ogg" },
+    { title: "舒伯特《小夜曲》D.889", src: "/app/audio/classical/schubert-serenade.ogg" },
+    { title: "舒伯特《即兴曲》Op.90 No.3", src: "/app/audio/classical/schubert-impromptu-op90-3.ogg" },
+    { title: "肖邦《升C小调夜曲（遗作）》", src: "/app/audio/classical/chopin-nocturne-c-sharp-minor.ogg" },
+    { title: "肖邦《降E大调夜曲》Op.9 No.2", src: "/app/audio/classical/chopin-nocturne-op9-2.ogg" },
+    { title: "肖邦《E小调前奏曲》Op.28 No.4", src: "/app/audio/classical/chopin-prelude-op28-4.ogg" },
+    { title: "肖邦《A小调圆舞曲（遗作）》", src: "/app/audio/classical/chopin-waltz-a-minor.ogg" },
+    { title: "门德尔松《威尼斯船歌》Op.30 No.6", src: "/app/audio/classical/mendelssohn-venetian-gondola-song.ogg" },
+    { title: "勃拉姆斯《摇篮曲》Op.49 No.4", src: "/app/audio/classical/brahms-lullaby.ogg" },
+    { title: "德彪西《月光》", src: "/app/audio/classical/clair-de-lune.ogg" },
+    { title: "德彪西《梦》", src: "/app/audio/classical/debussy-reverie.ogg" },
+    { title: "萨蒂《裸体舞曲》第一首", src: "/app/audio/classical/gymnopedie-1.ogg" },
+    { title: "萨蒂《玄秘曲》第一首", src: "/app/audio/classical/satie-gnossienne-1.ogg" },
+    { title: "柴可夫斯基《六月·船歌》", src: "/app/audio/classical/tchaikovsky-june-barcarolle.ogg" }
   ];
 
   function load() {
@@ -50,9 +50,9 @@ export function initializeSound(scope) {
   function save() { try { localStorage.setItem(KEY, JSON.stringify(settings)); } catch (e) {} }
   function sfx(kind) {
     var sounds = {
-      delete: { src: "/ai-shell/static/audio/uisfx/zen-57-delete.mp3", volume: .22 },
-      message: { src: "/ai-shell/static/audio/uisfx/zen-04-message.mp3", volume: .20 },
-      general: { src: "/ai-shell/static/audio/uisfx/zen-01-general.mp3", volume: .18 }
+      delete: { src: "/app/audio/uisfx/zen-57-delete.mp3", volume: .22 },
+      message: { src: "/app/audio/uisfx/zen-04-message.mp3", volume: .20 },
+      general: { src: "/app/audio/uisfx/zen-01-general.mp3", volume: .18 }
     };
     var name = sounds[kind] ? kind : "general", sound = sounds[name];
     var clip = sfxAudios[name];
@@ -105,7 +105,7 @@ export function initializeSound(scope) {
     cancelBgmFade();
     var started = performance.now();
     function step(now) {
-      var progress = Math.min(1, (now - started) / duration);
+      var progress = Math.max(0, Math.min(1, (now - started) / duration));
       bgmAudio.volume = from + (to - from) * progress;
       if (progress < 1) bgmFading = scope.frame(step);
       else { bgmFading = null; if (done) done(); }

@@ -34,13 +34,17 @@ CREATE TABLE IF NOT EXISTS experiments (
     field_updated_at TEXT DEFAULT '{}',
     revision      INTEGER NOT NULL DEFAULT 0,
     created_at    TEXT DEFAULT '',
-    updated_at    TEXT DEFAULT ''
+    updated_at    TEXT DEFAULT '',
+    format_version INTEGER NOT NULL DEFAULT 1,
+    document_json TEXT DEFAULT NULL,
+    summary_text TEXT NOT NULL DEFAULT '',
+    search_text TEXT NOT NULL DEFAULT ''
 )
 """
 
 SQL_CREATE_FTS = """
 CREATE VIRTUAL TABLE IF NOT EXISTS experiments_fts USING fts5(
-    title, purpose, conclusion, original_notes,
+    title, purpose, conclusion, original_notes, search_text,
     content='experiments', content_rowid='rowid'
 )
 """

@@ -2,8 +2,11 @@ import yaml
 from flask import Blueprint, g, jsonify, render_template, request
 
 from lib.parser import parse_notes, strip_html
+from lib.runtime_paths import app_root
+from routes.pages import print_assets
 
-experiment_bp = Blueprint("experiment", __name__)
+experiment_bp = Blueprint("experiment", __name__,
+                          template_folder=str(app_root() / "frontend/src/features/print/templates"))
 
 
 def _notify_experiment_change(exp_id, action):
@@ -60,6 +63,8 @@ def delete_experiment(exp_id):
 
 @experiment_bp.route("/<exp_id>/save-json", methods=["POST"])
 def save_experiment_json(exp_id):
+    if (g.exp_repo.load(exp_id) or {}).get('format_version') == 2:
+        return jsonify(error={'code': 'use_record_operations', 'message': '请使用灵活正文编辑接口'}), 409
     data = request.get_json()
     if not data or not isinstance(data, dict):
         return jsonify({"ok": False, "error": "Invalid JSON"}), 400
@@ -90,6 +95,8 @@ def regenerate_experiment(exp_id):
     exp = g.exp_repo.load(exp_id)
     if not exp:
         return jsonify({"ok": False, "error": "Experiment not found"}), 404
+    if exp.get('format_version') == 2:
+        return jsonify(error={'code': 'structure_change_requires_confirmation', 'message': '请通过对话提出正文结构方案'}), 409
 
     notes_raw = request.form.get("original_notes", "").strip()
     if notes_raw and "<" in notes_raw:
@@ -125,7 +132,9 @@ def print_experiment(exp_id):
     exp = g.exp_repo.load(exp_id)
     if not exp:
         return "Experiment not found", 404
-    return render_template("print.html", exp=exp)
+    if exp.get('format_version') == 2:
+        return render_template('print_record.html', exp=exp, print_assets=print_assets('record'))
+    return render_template("print.html", exp=exp, print_assets=print_assets("experiment"))
 
 
 @experiment_bp.route("/analysis/<anal_id>/print")
@@ -133,4 +142,4 @@ def print_analysis(anal_id):
     a = g.analysis_repo.load(anal_id)
     if not a:
         return "Analysis not found", 404
-    return render_template("print_analysis.html", analysis=a)
+    return render_template("print_analysis.html", analysis=a, print_assets=print_assets("analysis"))

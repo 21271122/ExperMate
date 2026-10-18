@@ -31,10 +31,20 @@ export function ExperimentList({ path }: { path: string }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [bodyMatches, setBodyMatches] = useState<{ query: string; ids: string[] }>({ query: '', ids: [] });
   const drag = useRef('');
   const mutation = useRef(false);
   const mounted = useRef(true);
   const compare = panel === 'compare';
+  useEffect(() => {
+    const query = filters.query.trim();
+    if (!query || !data.experiments.some(exp => exp.format_version === 2)) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      void requestJson('/api/v1/experiments/matches?q=' + encodeURIComponent(query), { signal: controller.signal }).then(body => setBodyMatches({ query, ids: body.data })).catch(reason => { if (!controller.signal.aborted) setError(reason.message); });
+    }, 200);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [filters.query, data.experiments]);
   const selectedRef = useRef(selected); selectedRef.current = selected;
   const filtersRef = useRef(filters); filtersRef.current = filters;
   const emptyModal = (): Modal => ({ mode: 'add', name: '', description: '', assigned: [] });
@@ -156,7 +166,9 @@ export function ExperimentList({ path }: { path: string }) {
   const setFilter = (patch: Partial<Filters>) => setFilters(old => ({ ...old, ...patch }));
   const tags = [...new Set(data.experiments.flatMap(exp => exp.tags || []))].sort();
   const pinIds = category === '__all__' ? data.pinnedIds : data.categoryPinned[category] || [];
-  const filtered = sortExperiments(data.experiments.filter(exp => matches(exp, filters)));
+  const filtered = sortExperiments(data.experiments.filter(exp => exp.format_version === 2 && filters.query.trim()
+    ? bodyMatches.query === filters.query.trim() && bodyMatches.ids.includes(exp.id) && matches(exp, { ...filters, query: '' })
+    : matches(exp, filters)));
   const activeFilters = !!(filters.query.trim() || filters.status || filters.tags.length || filters.dateFrom || filters.dateTo);
   const primary = filtered.filter(exp => category === '__all__' || (data.collections[category] || []).includes(exp.id));
   const other = category === '__all__' || !activeFilters ? [] : filtered.filter(exp => !primary.includes(exp) && Object.values(data.collections).some(ids => ids.includes(exp.id)));
@@ -176,7 +188,7 @@ export function ExperimentList({ path }: { path: string }) {
     {compare && mobileCompare && document.getElementById('page-toolbar') && createPortal(<div id="compare-bar" style={{ position:'sticky',top:0,zIndex:50,background:'var(--yellow)',borderBottom:'4px solid var(--black)',padding:'0.45rem 0.9rem',display:'flex',alignItems:'center',gap:'0.6rem',fontWeight:900,fontSize:'0.8rem',letterSpacing:'0.5px' }}>
       <span style={{flex:1}}>{selected.length < 2 ? `已选择 ${selected.length} / 需 2` : `已选择 ${selected.length} experiments`}</span><button type="button" className="outline" disabled={selected.length<2} onClick={goCompare}>Start Compare</button><button type="button" className="outline secondary" onClick={()=>activatePanel('')}>取消</button></div>, document.getElementById('page-toolbar')!)}
     <section className="exp-list-page" aria-label="Experiment list">
-      <header className="exp-list-header"><h1>实验记录</h1><div className="header-right">
+      <header className="exp-list-header"><h1>实验记录</h1><div className="header-right"><a href="/new" role="button">新建记录</a><a href="/record-drafts">继续草稿</a>
         <span id="list-context">{data.experiments.filter(exp => isArchived(exp) === (filters.status === 'archived')).length} 条记录 · {filters.status === 'archived' ? '已归档' : `分类：${category === '__all__' ? '全部实验' : category}`}</span>
         <div className="view-toggle" id="view-toggle" role="group" aria-label="List view">{[false, true].map(value => <button key={String(value)} type="button" data-view={value ? 'cards' : 'rows'}
           className={cards === value ? 'active' : ''} title={value ? '卡片视图' : '索引行'} aria-pressed={cards === value}

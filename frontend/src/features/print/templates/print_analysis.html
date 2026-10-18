@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ analysis.get('id', '分析报告') }} — 打印</title>
+{% for href in print_assets.css %}
+<link rel="stylesheet" href="{{ href }}">
+{% endfor %}
+<script type="module" src="{{ print_assets.js }}"></script>
+</head>
+<body>
+
+<div class="print-wrapper">
+
+  <div class="print-guide no-print">
+    <strong>&#x1f4c4; 如何保存为 PDF 文件：</strong>
+    <ol>
+      <li>点击下方的<strong>"打开打印对话框"</strong>按钮</li>
+      <li>在弹出的打印窗口中，找到<strong>"目标打印机"</strong>（或 "Destination"）下拉菜单</li>
+      <li>选择 <strong>"另存为 PDF"</strong>（或 "Save as PDF"）</li>
+      <li>点击 <strong>"保存"</strong>（或 "Print"），选择保存位置即可</li>
+    </ol>
+  </div>
+
+  <button class="print-btn no-print" data-print-action="print">&#x1f5a8; 打开打印对话框</button>
+
+  <h1>{{ analysis.get('id', '分析报告') }}</h1>
+  <div class="meta">
+    <span>{{ analysis.get('timestamp', '') }}</span>
+  </div>
+
+  {% if analysis.get('question') %}
+  <div class="question-box">
+    <strong>Question</strong>
+    <p style="margin:0.3em 0 0 0;font-weight:600">{{ analysis.get('question') }}</p>
+  </div>
+  {% endif %}
+
+  {% set refs = analysis.get('selected_ids', []) %}
+  {% if refs %}
+  <div class="section">
+    <h2>Referenced Experiments</h2>
+    <p>{% for rid in refs %}<span class="tag-pill">{{ rid }}</span>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  </div>
+  {% endif %}
+
+  <hr style="border:1px solid #333;margin:1.5em 0">
+
+  <div class="markdown-content">{{ analysis.get('analysis', '') }}</div>
+
+</div>
+
+<div class="no-print" style="text-align:center;padding:1.5rem">
+  <button class="print-btn" data-print-action="print">&#x1f5a8; 打开打印对话框</button>
+  <button class="print-btn" data-print-action="close" style="margin-left:0.5rem;background:#888">关闭</button>
+</div>
+
+</body>
+</html>

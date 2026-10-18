@@ -124,6 +124,12 @@ def api_remove_attachment_link(exp_id: str, sha256: str):
     experiment = g.exp_repo.load(exp_id)
     if not experiment:
         return jsonify({"ok": False, "error": "实验不存在"}), 404
+    document = experiment.get('document') or {}
+    in_content = any(item['sha256'] == sha256 for section in document.get('sections', [])
+                     for field in section['fields'] if field['kind'] == 'assets' for item in field['content']['items'])
+    in_sources = any(source['kind'] == 'attachment' and source['reference'] == sha256 for source in document.get('sources', []))
+    if in_content or in_sources:
+        return jsonify(error={'code': 'attachment_in_use', 'message': '正文或来源仍引用该附件，请先在正文中调整引用。'}), 409
     links = _attachment_links(experiment)
     kept = [link for link in links if link["sha256"] != sha256]
     if len(kept) == len(links):

@@ -1,0 +1,129 @@
+.record-document { font-family: var(--font-ui,sans-serif); font-size: var(--type-body,.875rem); min-width: 0; max-width: 100%; container-type: inline-size; container-name: record; }
+.record-document, .record-document * { box-sizing: border-box; }
+.record-document .record-section { margin: var(--space-4,16px) 0; border: var(--border,4px) solid var(--black,#111); background: var(--off-white,#f4f4f4); }
+.record-document .record-section > h2 { display: flex; align-items: center; gap: var(--space-2,8px); margin: 0; padding: var(--space-2,8px) var(--space-3,12px); border: 0; border-left: var(--border-thick,6px) solid var(--blue,#1d54a6); background: var(--black,#111); color: var(--white,#fff); font-size: var(--type-section,1rem); line-height: 1.3; font-weight: 800; letter-spacing: .04em; }
+.record-section-index { color: var(--yellow,#f8d030); font-weight: 900; font-size: var(--type-caption,.75rem); font-variant-numeric: tabular-nums; }
+.record-document .record-field { display: grid; grid-template-columns: 132px minmax(0,1fr); margin: 0; padding: var(--space-3,12px); border: 0; background: transparent; overflow-wrap: anywhere; }
+.record-document .record-field + .record-field { border-top: var(--border-fine,1px) solid var(--divider,#ddd); }
+.record-document .record-field > header { display: flex; align-items: flex-start; flex-wrap: wrap; gap: var(--space-1,4px); margin: 0; padding: 0 var(--space-3,12px) 0 0; border: 0; background: transparent; min-width: 0; }
+.record-document .record-field h3 { margin: 0; border: 0; padding: 0; font-size: var(--type-body,.875rem); color: var(--black,#111); font-weight: 800; line-height: 1.5; }
+.record-field-content { padding: 0; min-width: 0; line-height: 1.5; }
+.record-field-content > :first-child { margin-top: 0; }.record-field-content > :last-child { margin-bottom: 0; }
+.record-document .markdown-content p { margin: 0 0 var(--space-2,8px); }
+.record-document .markdown-content :is(ul,ol) { margin: var(--space-1,4px) 0; padding-left: var(--space-6,24px); }
+.record-document .markdown-content :is(img,svg,video,canvas) { max-width: 100%; height: auto; }
+.record-document pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; max-width: 100%; }
+.record-document .record-field-editing { display: block; }
+.record-document .record-field-editing > header { border-right: 0; border-bottom: var(--border-fine,1px) solid var(--divider,#ddd); align-items: center; }
+.record-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1,4px); margin: var(--space-2,8px) 0; min-width: 0; }
+.record-controls > input { flex: 1; min-width: 0; width: 140px; }
+.record-controls > label { min-width: 0; max-width: 100%; }
+.record-toolbar { gap: var(--space-1,4px); margin: var(--space-1,4px) 0 var(--space-2,8px); }
+.record-toolbar small { font-size: var(--type-caption,.75rem); margin-right: auto; }
+.record-toolbar button { padding: var(--space-1,4px) var(--space-2,8px); border-width: var(--border,4px); font-size: var(--type-caption,.75rem); line-height: 1.3; }
+.record-heading h1 { font-size: var(--type-title,1.5rem); line-height: 1.3; margin: var(--space-2,8px) 0 var(--space-1,4px); padding: 0; border: 0; overflow-wrap: anywhere; }
+.record-heading p { font-size: var(--type-caption,.75rem); color: var(--text-2,#666); margin: 0 0 var(--space-3,12px); }
+.record-controls input, .record-controls select, .record-controls button { max-width: 100%; box-sizing: border-box; }
+.record-document input:not([type=checkbox]), .record-document textarea, .record-document select { font: inherit; padding: var(--space-1,4px); border: var(--border-control,2px) solid var(--black,#111); background: var(--white,white); color: inherit; width: auto; max-width: 100%; min-width: 0; }
+.record-document .record-controls input { width: 140px; }
+.record-document textarea { width: 100%; display: block; margin: var(--space-2,8px) 0; }
+.record-document button { white-space: normal; overflow-wrap: anywhere; max-width: 100%; padding: var(--space-1,4px) var(--space-2,8px); font-size: var(--type-caption,.75rem); }
+.record-table-scroll { min-width: 0; max-width: 100%; }
+.record-document table { width: 100%; max-width: 100%; table-layout: fixed; margin: 0; border-collapse: collapse; border: 0; }
+.record-document thead { border-bottom: var(--border-fine,1px) solid var(--divider,#ddd); }
+.record-document th { background: var(--off-white,#f4f4f4); font-weight: 700; }
+.record-document tbody tr { border: 0; }
+.record-document th, .record-document td { min-width: 0; padding: var(--space-1,4px) var(--space-2,8px); overflow-wrap: anywhere; white-space: normal; text-align: left; }
+.record-document td input, .record-document th input { min-width: 0; width: 100%; }
+.record-document fieldset { min-width: 0; border: var(--border-control,2px) solid var(--black,#111); margin: var(--space-2,8px) 0; padding: var(--space-2,8px); }
+.record-process rect, .record-process path[stroke] { stroke-width: var(--border-control,2px); }
+.record-process-container { width: 100%; min-width: 0; }
+.record-process { display: block; max-width: 100%; height: auto; margin: 0 auto; color: var(--black,#111); }
+.record-card-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(150px,100%),1fr)); gap: var(--space-2,8px); }
+.record-card-grid dl { border: var(--border-control,2px) solid var(--black,#111); padding: var(--space-2,8px); margin: 0; }
+.record-card-grid dt { font-weight: bold; }.record-card-grid dd { margin: 0 0 var(--space-1,4px); }
+.record-formula { position: relative; max-width: 100%; min-width: 0; overflow: hidden; }
+.record-formula-content { width: max-content; transform-origin: top left; }
+.record-formula .katex-display { margin: var(--space-1,4px) 0; }
+.record-note { color: var(--text-2,#666); font-size: var(--type-caption,.75rem); white-space: pre-wrap; margin: var(--space-1,4px) 0 0; }
+.record-section > .record-note { padding: var(--space-2,8px) var(--space-3,12px); margin: 0; }
+.record-label { display: block; margin-top: var(--space-2,8px); }
+.record-is-editing { font-family: var(--font-ui,sans-serif); font-size: var(--type-body,.875rem); min-width: 0; }
+.record-is-editing *, .record-is-editing *::before { box-sizing: border-box; }
+.record-toolbar-editing { position: sticky; top: 0; z-index: 3; padding: var(--space-2,8px) 0; background: var(--white,#fff); border-bottom: var(--border-control,2px) solid var(--black,#111); }
+.record-save-indicator { color: var(--text-2,#666); font-size: var(--type-caption,.75rem); }
+.record-meta-editor { padding: var(--space-3,12px) 0; }
+.record-meta-editor h2 { margin: 0 0 var(--space-2,8px); padding: 0; border: 0; font-size: var(--type-section,1rem); }
+.record-meta-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--space-3,12px); }
+.record-meta-wide { grid-column: span 2; }
+.record-form-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(180px,100%),1fr)); gap: var(--space-2,8px); }
+.record-is-editing .record-label { display: flex; flex-direction: column; gap: var(--space-1,4px); margin: 0; min-width: 0; font-size: var(--type-caption,.75rem); font-weight: 700; }
+.record-is-editing :is(.record-label,.record-column-editor) > :is(input,select,textarea) { width: 100%; min-width: 0; max-width: 100%; margin: 0; padding: var(--space-2,8px); border: var(--border-control,2px) solid var(--black,#111); border-radius: 0; background: var(--white,#fff); color: var(--black,#111); font: inherit; font-size: var(--type-body,.875rem); font-weight: 400; }
+.record-is-editing textarea { resize: vertical; }
+.record-is-editing :is(input,select,textarea,button,summary):focus-visible { outline: var(--border-control,2px) solid var(--blue,#1d54a6); outline-offset: 2px; }
+.record-document-editing .record-field > header { justify-content: space-between; padding: 0 0 var(--space-2,8px); margin-bottom: var(--space-2,8px); border-bottom: var(--border-fine,1px) solid var(--divider,#ddd); }
+.record-document-editing .record-field-active { background: var(--white,#fff); box-shadow: inset var(--border-control,2px) 0 var(--blue,#1d54a6); }
+.record-edit-hint { margin: var(--space-2,8px) 0; color: var(--text-2,#666); font-size: var(--type-caption,.75rem); }
+.record-editor-details { border-top: var(--border-fine,1px) solid var(--divider,#ddd); padding-top: var(--space-2,8px); margin-top: var(--space-3,12px); }
+.record-editor-details > summary, .record-add-fields > summary { cursor: pointer; font-size: var(--type-caption,.75rem); font-weight: 700; }
+.record-editor-details[open] > summary { margin-bottom: var(--space-2,8px); }
+.record-add-fields { padding: var(--space-2,8px) var(--space-3,12px); border-top: var(--border-fine,1px) solid var(--divider,#ddd); }
+.record-column-editor { display: flex; align-items: end; gap: var(--space-2,8px); margin: var(--space-2,8px) 0; }
+.record-column-editor > label { flex: 1; }
+.record-document td textarea { min-height: 54px; margin: 0; }
+.record-flow-editor .record-process-target[role=button] { display: inline; cursor: pointer; color: inherit; background: none; border: 0; padding: 0; margin: 0; font: inherit; text-transform: none; letter-spacing: normal; transform: none; box-shadow: none; }
+.record-flow-editor .record-process-target:is([data-selected],:focus-visible) { color: var(--blue,#1d54a6); outline: none; }
+.record-flow-editor .record-process-target:is([data-selected],:focus-visible) text { font-weight: 700; }
+.record-process .record-action-hit { fill: transparent; stroke: none; }
+.record-process-choices { align-items: end; gap: var(--space-2,8px); margin-top: var(--space-3,12px); }
+.record-process-choices > label { flex: 1; }
+.record-object-editor { border-top: var(--border-control,2px) solid var(--blue,#1d54a6); padding-top: var(--space-3,12px); margin-top: var(--space-3,12px); }
+.record-object-editor h4 { margin: 0 0 var(--space-2,8px); font-size: var(--type-body,.875rem); }
+.record-object-editor > button { margin-top: var(--space-2,8px); }
+.record-node-choices { margin: var(--space-3,12px) 0; }
+.record-node-choices > strong, .record-parameter-heading { display: block; font-size: var(--type-caption,.75rem); margin-bottom: var(--space-1,4px); }
+.record-node-choices > div { display: flex; flex-wrap: wrap; gap: var(--space-2,8px) var(--space-3,12px); }
+.record-node-choices label { display: inline-flex; align-items: center; gap: var(--space-1,4px); min-width: 0; overflow-wrap: anywhere; }
+.record-parameter-row { display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) auto; align-items: end; gap: var(--space-2,8px); margin: var(--space-2,8px) 0; }
+.record-document .record-danger { background: transparent; color: var(--text-2,#666); border: var(--border-fine,1px) solid var(--divider,#ddd); }
+@media (max-width: 600px) {
+  .record-meta-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .record-meta-grid .record-meta-wide { grid-column: 1 / -1; }
+  .record-toolbar-editing small { flex-basis: 100%; }
+}
+@container record (max-width: 400px) {
+  .record-parameter-row { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+.record-assets figure { margin: var(--space-2,8px) 0; }.record-assets img { max-width: 100%; max-height: 400px; object-fit: contain; }
+.record-field-content details { font-size: var(--type-caption,.75rem); margin-top: var(--space-2,8px); }
+.record-proposal { font-family: var(--font-ui,sans-serif); font-size: var(--type-body,.875rem); line-height: 1.5; width: 100%; box-sizing: border-box; border: var(--border,4px) solid var(--black,#111); border-left: var(--border-thick,6px) solid var(--blue,#1d54a6); box-shadow: var(--shadow,6px 6px 0 #111); background: var(--white,#fff); padding: var(--space-3,12px); margin: var(--space-2,8px) 0 var(--space-3,12px); min-width: 0; }
+.record-proposal > strong { display: block; margin: calc(-1 * var(--space-3,12px)) calc(-1 * var(--space-3,12px)) var(--space-2,8px); padding: var(--space-1,4px) var(--space-3,12px); border-bottom: var(--border-control,2px) solid var(--black,#111); background: var(--off-white,#f4f4f4); color: var(--black,#111); font-family: var(--font-ui,sans-serif); font-size: var(--type-caption,.75rem); letter-spacing: 1px; }
+.record-proposal-meta { color: var(--text-2,#666); font-size: var(--type-caption,.75rem); margin: var(--space-1,4px) 0 var(--space-2,8px); }
+.record-proposal > details { margin-top: var(--space-1,4px); }
+.record-proposal > details > .record-document { max-height: 450px; overflow-y: auto; }
+.record-table-stacked :is(table,thead,tbody,tr,th,td) { display: block; width: 100%; }
+.record-table-stacked:not(.record-table-editor) thead { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); overflow: hidden; }
+.record-table-stacked tbody tr { padding: var(--space-2,8px) 0; border-bottom: var(--border-fine,1px) solid var(--divider,#ddd); }
+.record-table-stacked td[data-label] { display: grid; grid-template-columns: minmax(64px,28%) minmax(0,1fr); gap: var(--space-2,8px); padding: var(--space-1,4px) var(--space-2,8px); }
+.record-table-stacked td[data-label]::before { content: attr(data-label); font-weight: 700; color: var(--text-2,#666); }
+.record-table-stacked.record-table-editor thead { display: none; }
+@container record (max-width: 520px) {
+  .record-document .record-field { grid-template-columns: minmax(0,1fr); }
+  .record-document .record-field > header { padding: 0 0 var(--space-1,4px); border: 0; }
+  .record-field-content { padding: 0; }
+  .record-table-scroll :is(table,thead,tbody,tr,th,td) { display: block; width: 100%; }
+  .record-table-scroll:not(.record-table-editor) thead { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); overflow: hidden; }
+  .record-table-scroll tbody tr { padding: var(--space-2,8px) 0; border-bottom: var(--border-fine,1px) solid var(--divider,#ddd); }
+  .record-table-scroll td[data-label] { display: grid; grid-template-columns: minmax(64px,28%) minmax(0,1fr); gap: var(--space-2,8px); padding: var(--space-1,4px) var(--space-2,8px); }
+  .record-table-scroll td[data-label]::before { content: attr(data-label); font-weight: 700; color: var(--text-2,#666); }
+  .record-table-editor thead { display: none; }
+}
+@media print {
+  .record-document .record-section { margin: var(--space-3,12px) 0; }
+  .record-document .record-section > h2 { background: none; color: #000; border-left: 0; border-bottom: var(--border-control,2px) solid #000; padding: var(--space-1,4px) var(--space-2,8px); }
+  .record-section-index { color: #555; }
+  .record-document .record-field { background: #fff; border-color: #bbb; }
+  .record-document .record-field h3, .record-process { color: #000; }
+  .record-process { break-inside: avoid; }
+  .record-controls { display: none; }
+}

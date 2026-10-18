@@ -6,6 +6,7 @@
 """
 
 import threading
+from contextlib import contextmanager
 from typing import Callable, Optional
 
 # 进程内所有 sqlite 连接共享的全局写锁：SQLite 单写者，跨连接串行化最干净，
@@ -30,6 +31,7 @@ class ThreadSafeConnection:
     def __init__(self, conn, lock: Optional[threading.RLock] = None) -> None:
         object.__setattr__(self, "_conn", conn)
         object.__setattr__(self, "_lock", lock or threading.RLock())
+        object.__setattr__(self, "_transaction_depth", 0)
         # 自动提交模式：每条 DML 立即生效，杜绝"某仓储只写不 commit"留下开启的写事务，
         # 从而造成对该连接（乃至整个库）的永久写锁锁死。
         try:
@@ -58,12 +60,36 @@ class ThreadSafeConnection:
         # 脚本内容无法可靠轻量地分类，按写操作保护。
         with _DB_WRITE_LOCK:
             with self._lock:
+                if self._transaction_depth:
+                    raise RuntimeError("事务内禁止 executescript 隐式提交")
                 return self._conn.executescript(sql)
 
     def commit(self):
         with _DB_WRITE_LOCK:
             with self._lock:
-                return self._conn.commit()
+                if not self._transaction_depth:
+                    return self._conn.commit()
+
+    @contextmanager
+    def transaction(self):
+        """同一连接的复合写原子提交；仓储内 commit 不提前提交外层事务。"""
+        with _DB_WRITE_LOCK, self._lock:
+            depth = self._transaction_depth
+            savepoint = f"record_tx_{depth}"
+            self._conn.execute("BEGIN IMMEDIATE" if depth == 0 else f"SAVEPOINT {savepoint}")
+            object.__setattr__(self, "_transaction_depth", depth + 1)
+            try:
+                yield self
+                self._conn.execute("COMMIT" if depth == 0 else f"RELEASE SAVEPOINT {savepoint}")
+            except BaseException:
+                if depth == 0:
+                    self._conn.rollback()
+                else:
+                    self._conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                    self._conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+                raise
+            finally:
+                object.__setattr__(self, "_transaction_depth", depth)
 
     def __getattr__(self, name):
         return getattr(self._conn, name)

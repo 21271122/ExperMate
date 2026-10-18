@@ -91,4 +91,4 @@ ExperMate 的项目代码采用 [Elastic License 2.0（ELv2）](LICENSE)。你�
 
 本项目截至 2026 年 8 月底，共耗时 4 个月，消耗 60 亿+ tokens。如果觉得项目有帮助，可否小小补贴一下 token 的开销？
 
-<img src="static/img/support-qr.png" alt="扫描二维码支持 ExperMate" width="180">
+<img src="frontend/public/img/support-qr.png" alt="扫描二维码支持 ExperMate" width="180">

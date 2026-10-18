@@ -32,6 +32,9 @@ export function createPanelManager(scope) {
   // ---- 路由表 ----
 
   var ROUTES = {
+    "/new":                      { color: "var(--black)", title: "新建记录" },
+    "/record-drafts":            { color: "var(--black)", title: "继续整理草稿" },
+    "/record-drafts/:id":        { color: "var(--black)", title: "实验草稿" },
     "/experiments":              { color: "var(--black)", title: "实验记录" },
     "/experiments/:id":          { color: "var(--black)", title: "Experiment" },
     "/experiments/:id/print":    { color: "#E32636", title: "Print" },
@@ -180,16 +183,6 @@ export function createPanelManager(scope) {
       if (services.ExMotion) await services.ExMotion.begin(_backColorPath(), origin, _contentPanel);
       if (version !== _navigationVersion) return;
       if (pushState) _pushState("/", "", null);
-      reset();
-      if (services.ExMotion) services.ExMotion.reveal();
-      return;
-    }
-
-    // 特殊路由：/new → 重定向到首页（agent 处理新建实验）
-    if (path === "/new") {
-      if (services.ExMotion) await services.ExMotion.begin(_backColorPath(), origin, _contentPanel);
-      if (version !== _navigationVersion) return;
-      if (pushState) _pushState("/", "");
       reset();
       if (services.ExMotion) services.ExMotion.reveal();
       return;

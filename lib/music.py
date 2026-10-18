@@ -49,7 +49,7 @@ def is_audio_attachment(name: str, mime: str) -> bool:
 def builtin_tracks() -> list[dict[str, str]]:
     return [
         {"id": f"builtin:{slug}", "title": title,
-         "src": f"/ai-shell/static/audio/classical/{filename}", "source": "builtin"}
+         "src": f"/app/audio/classical/{filename}", "source": "builtin"}
         for slug, title, filename in _BUILTIN
     ]
 

@@ -47,7 +47,24 @@ def get_experiment(exp_id):
     experiment = g.exp_repo.load(exp_id)
     if experiment is None:
         return jsonify(error={"code": "not_found", "message": "实验不存在或不可访问"}), 404
-    return jsonify(data=experiment)
+    proposals = []
+    if getattr(g, 'record_svc', None):
+        experiment = g.record_svc.get('experiment', exp_id)
+        proposals = g.record_svc.storage.proposals_for('experiment', exp_id)
+    return jsonify(data=experiment, proposals=proposals)
+
+
+@api_v1_bp.get('/experiments/matches')
+def match_experiments():
+    query = request.args.get('q', '').strip()
+    if not query or len(query) > 200:
+        return jsonify(error={'code': 'invalid_query', 'message': '搜索词长度为 1～200 字符'}), 400
+    escaped = query.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+    rows = g.exp_repo.db.execute('''SELECT id FROM experiments WHERE user_id=? AND
+        (id LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' OR experimenter LIKE ? ESCAPE '\\'
+         OR tags LIKE ? ESCAPE '\\' OR search_text LIKE ? ESCAPE '\\')''',
+        [g.user_id, *([f'%{escaped}%'] * 5)]).fetchall()
+    return jsonify(data=[row['id'] for row in rows])
 
 
 @api_v1_bp.get("/experiment-list")
@@ -71,6 +88,8 @@ def timeline_context():
 def comparison_context():
     ids = [value.strip() for value in request.args.get("ids", "").split(",") if value.strip()][:4]
     records = [record for exp_id in ids if (record := g.exp_repo.load(exp_id)) is not None]
+    if getattr(g, 'record_svc', None):
+        records = [g.record_svc.get('experiment', record['id']) for record in records]
     if len(records) < 2:
         return jsonify(error={"code": "invalid_comparison", "message": "请至少选择两条可访问的实验记录"}), 400
     return jsonify(data=records)
@@ -97,8 +116,16 @@ def analysis_detail_context(anal_id):
     for record in snapshot.get("records") or []:
         exp_id = record.get("id") if isinstance(record, dict) else ""
         current = g.exp_repo.load(exp_id) if exp_id else None
-        before = {key: value for key, value in record.items() if key not in ignored} if isinstance(record, dict) else {}
-        after = {key: value for key, value in (current or {}).items() if key not in ignored}
+        def facts(value):
+            result = {key: item for key, item in (value or {}).items() if key not in ignored}
+            if result.get('format_version') == 2:
+                from lib.services.record_projection import semantic_document
+                result['document'] = semantic_document(result['document'])
+                result.pop('search_text', None)
+                result.pop('summary_text', None)
+            return result
+        before = facts(record) if isinstance(record, dict) else {}
+        after = facts(current)
         if not current or before != after:
             stale_ids.append(exp_id)
     return jsonify(data={"analysis": analysis, "stale_ids": stale_ids})

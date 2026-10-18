@@ -36,7 +36,7 @@ def api_resolve_reference():
         tags = " ".join(exp.get("tags") or []).lower()
         purpose = (exp.get("purpose") or "")[:200].lower()
         materials = " ".join(m.get("name", "") for m in (exp.get("materials") or [])).lower()
-        searchable = f"{title} {tags} {purpose} {materials}"
+        searchable = f"{title} {tags} {purpose} {materials} {exp.get('search_text', '')}".lower()
 
         keywords = text_lower.split()
         for kw in keywords:

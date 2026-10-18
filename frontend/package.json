@@ -13,6 +13,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "dompurify": "3.4.17",
+    "katex": "0.19.0",
     "marked": "15.0.12",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
@@ -21,6 +23,7 @@
     "@testing-library/jest-dom": "^6.0.0",
     "@testing-library/react": "^16.0.0",
     "@testing-library/user-event": "^14.0.0",
+    "@types/katex": "0.16.8",
     "@types/node": "^22.20.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

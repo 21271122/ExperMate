@@ -193,7 +193,12 @@ class AnalysisService:
     def _analyze_experiments(
         self, packet: dict[str, Any], question: str, request_timeout: int | None = None
     ) -> str:
-        evidence = json.dumps(packet, ensure_ascii=False, indent=2, default=str)
+        from lib.services.record_projection import semantic_document
+        model_packet = deepcopy(packet)
+        for record in model_packet.get('records', []):
+            if record.get('format_version') == 2:
+                record['document'] = semantic_document(record['document'])
+        evidence = json.dumps(model_packet, ensure_ascii=False, indent=2, default=str)
         user_prompt = f"""RESEARCHER'S QUESTION:
 {question}
 

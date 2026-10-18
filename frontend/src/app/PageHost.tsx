@@ -9,11 +9,15 @@ import { Comparison } from '../features/experiments/Comparison';
 import { AnalysisDetail, AnalysisList } from '../features/analysis/AnalysisPages';
 import { SettingsPage } from '../features/settings/SettingsPage';
 import { LoginPage } from '../features/account/LoginPage';
+import { DraftList, FlexibleRecord, NewRecord } from '../features/record-document/FlexibleRecord';
 
-export const reactPagePaths = ['/experiments', '/favorites', '/timeline', '/templates', '/compare', '/analyze', '/settings', '/login'];
-export const canRenderPage = (path: string) => reactPagePaths.includes(path) || /^\/(experiments|analysis)\/[^/]+$/.test(path);
+export const reactPagePaths = ['/new', '/record-drafts', '/experiments', '/favorites', '/timeline', '/templates', '/compare', '/analyze', '/settings', '/login'];
+export const canRenderPage = (path: string) => reactPagePaths.includes(path) || /^\/(experiments|analysis|record-drafts)\/[^/]+$/.test(path);
 
 function Page({ path }: { path: string }) {
+  if (path === '/new') return <NewRecord />;
+  if (path === '/record-drafts') return <DraftList />;
+  if (path.startsWith('/record-drafts/')) return <FlexibleRecord draftId={decodeURIComponent(path.slice('/record-drafts/'.length))} />;
   if (/^\/experiments\/[^/]+$/.test(path)) return <ExperimentDetail expId={decodeURIComponent(path.slice('/experiments/'.length))} />;
   if (/^\/analysis\/[^/]+$/.test(path)) return <AnalysisDetail id={decodeURIComponent(path.slice('/analysis/'.length))} />;
   if (path === '/timeline') return <Timeline />;

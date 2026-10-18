@@ -46,6 +46,7 @@ def get_or_create_agent(
     analysis_svc: Any = None,
     extraction_svc: Any = None,
     attachment_store: Any = None,
+    record_svc: Any = None,
     context_compression_trigger_tokens: int = 300_000,
     context_compression_chunk_tokens: int = 260_000,
 ) -> AgentLoop:
@@ -59,7 +60,7 @@ def get_or_create_agent(
             analysis_store=analysis_repo,
             analysis_svc=analysis_svc,
             extraction_svc=extraction_svc,
-            attachment_store=attachment_store,
+            attachment_store=attachment_store, record_svc=record_svc,
             context_compression_trigger_tokens=context_compression_trigger_tokens,
             context_compression_chunk_tokens=context_compression_chunk_tokens,
         )
@@ -73,7 +74,7 @@ def get_or_create_agent(
             analysis_store=analysis_repo,
             analysis_svc=analysis_svc,
             extraction_svc=extraction_svc,
-            attachment_store=attachment_store,
+            attachment_store=attachment_store, record_svc=record_svc,
             context_compression_trigger_tokens=context_compression_trigger_tokens,
             context_compression_chunk_tokens=context_compression_chunk_tokens,
         )
@@ -85,7 +86,7 @@ def get_or_create_agent(
         analysis_store=analysis_repo,
         analysis_svc=analysis_svc,
         extraction_svc=extraction_svc,
-        attachment_store=attachment_store,
+        attachment_store=attachment_store, record_svc=record_svc,
         context_compression_trigger_tokens=context_compression_trigger_tokens,
         context_compression_chunk_tokens=context_compression_chunk_tokens,
     )
@@ -152,6 +153,7 @@ def build_legacy_child(
     favorites_repo: Any = None,
     analysis_repo: Any = None,
     attachment_store: Any = None,
+    record_svc: Any = None,
 ) -> AgentLoop:
     """为无线程关联的旧实验创建子 Agent。"""
     return AgentLoop.create_legacy_child_agent(
@@ -160,5 +162,5 @@ def build_legacy_child(
         update_log_store=update_log_repo,
         favorites_store=favorites_repo,
         analysis_store=analysis_repo,
-        attachment_store=attachment_store,
+        attachment_store=attachment_store, record_svc=record_svc,
     )

@@ -4,6 +4,7 @@ import { readJsonEvents } from '../chat/events';
 import { services } from '../../runtime/services';
 import { requestJson } from '../../shared/api';
 import { escapeHtml, markdown } from './detail-model';
+import { StructureProposal } from '../record-document/StructureProposal';
 
 type Message = { role: string; content?: string; attachments?: { name?: string }[]; created_at?: string; tool_calls?: unknown[]; separator?: boolean };
 type ChildState = { history?: Message[]; _child_initial_history_len?: number; turn_count?: number; modified_values?: Record<string, unknown>; [key: string]: unknown };
@@ -14,6 +15,7 @@ function messageHtml(message: Message) {
 }
 export function ChildConversation({ expId, updated, kind = 'experiment' }: { expId: string; updated: () => void; kind?: 'experiment' | 'analysis' }) {
   const [messages, setMessages] = useState<Message[]>([]), [draft, setDraft] = useState(''), [busy, setBusy] = useState(false), [loading, setLoading] = useState(true);
+  const [proposalIds, setProposalIds] = useState<string[]>([]);
   const [legacy, setLegacy] = useState(false), [preview, setPreview] = useState<Record<string, unknown> | null>(null), [error, setError] = useState(''), [status, setStatus] = useState(''), [turn, setTurn] = useState(0);
   const controller = useRef(new AbortController()), pending = useRef(false), list = useRef<HTMLDivElement>(null), divider = useRef<HTMLDivElement>(null);
   const analysis = kind === 'analysis', placeholder = analysis ? '输入想核对的问题…' : '描述需要修改的内容…';
@@ -22,6 +24,12 @@ export function ChildConversation({ expId, updated, kind = 'experiment' }: { exp
     setTurn(Number(state.turn_count || 0));
   }
   function history(state: ChildState) {
+    const proposals: string[] = [];
+    for (const message of state.history || []) {
+      if (message.role !== 'tool') continue;
+      try { const tool = JSON.parse(message.content || '{}'); if (tool.display === 'structure_proposal' && tool.proposal_id) proposals.push(tool.proposal_id); } catch { /* 普通工具结果不产生审批卡片 */ }
+    }
+    setProposalIds([...new Set(proposals)]);
     const split = state._child_initial_history_len || 0; let earlier = false;
     const rows: Message[] = [];
     (state.history || []).forEach((message, index) => {
@@ -50,10 +58,10 @@ export function ChildConversation({ expId, updated, kind = 'experiment' }: { exp
     if (busy) animate(); else divider.current?.querySelectorAll<HTMLElement>('span').forEach(span => { span.style.flexGrow = '1'; });
     return () => clearTimeout(timer);
   }, [busy]);
-  async function send(initialLegacy = false) {
-    if (pending.current || loading || (!initialLegacy && !draft.trim())) return;
+  async function send(initialLegacy = false, messageOverride?: string) {
+    if (pending.current || loading || (!initialLegacy && !(messageOverride || draft).trim())) return;
     pending.current = true; setBusy(true); setError(''); setStatus('AI 正在回复…'); setLegacy(false);
-    const content = initialLegacy ? analysis ? '加载分析报告以便审阅' : '加载实验数据以便修改' : draft.trim(), created_at = new Date().toISOString();
+    const content = initialLegacy ? analysis ? '加载分析报告以便审阅' : '加载实验数据以便修改' : (messageOverride || draft).trim(), created_at = new Date().toISOString();
     if (!initialLegacy) { setDraft(''); setMessages(old => [...old, { role: 'user', content, created_at }]); }
     let text = '', streaming = false;
     try {
@@ -69,7 +77,11 @@ export function ChildConversation({ expId, updated, kind = 'experiment' }: { exp
           if (!streaming) { streaming = true; setMessages(old => [...old, { role: 'agent', content: text, created_at }]); }
           else setMessages(old => old.map((row, index) => index === old.length - 1 ? { ...row, content: text } : row));
         } else if (event.event === 'tool') setStatus('AI 正在处理…');
-        else if (event.event === 'tool_done') setStatus('AI 正在回复…');
+        else if (event.event === 'tool_done') {
+          setStatus('AI 正在回复…');
+          const result = event.result || event.display_result;
+          if (result?.display === 'structure_proposal' && result.proposal_id) setProposalIds(old => [...new Set([...old, result.proposal_id])]);
+        }
         else if (event.event === 'error') throw new Error(event.message || 'AI 处理失败');
         else if (event.event === 'done') {
           complete = true;
@@ -104,6 +116,7 @@ export function ChildConversation({ expId, updated, kind = 'experiment' }: { exp
             <div className="child-msg-wrap" style={{ display: 'flex', flexDirection: 'column', maxWidth: '82%', minWidth: 0, alignItems: message.role === 'user' ? 'flex-end' : undefined }}>
               <div className={`child-msg-content child-chat-bubble child-chat-bubble-${message.role}`} style={{ boxSizing: 'border-box', minWidth: 0, overflowWrap: 'anywhere', wordBreak: 'break-word', background: message.role === 'agent' ? 'var(--bubble-agent-bg)' : 'var(--black)', border: `${message.role === 'agent' ? 2 : 3}px solid var(--black)`, padding: message.role === 'agent' ? '8px 12px' : '8px 14px', fontSize: '0.88rem', lineHeight: 1.6, color: message.role === 'agent' ? 'var(--black)' : 'var(--white)', fontWeight: message.role === 'agent' ? undefined : 600 }} dangerouslySetInnerHTML={{ __html: messageHtml(message) }} />
               <time className="child-msg-time" dateTime={message.created_at} style={{ marginTop: 3, color: 'var(--gray)', fontFamily: 'var(--font-mono,monospace)', fontSize: '0.65rem', lineHeight: 1 }}>{message.created_at && new Date(message.created_at.replace(' ', 'T')).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</time></div></div>)}
+        {proposalIds.map(id => <StructureProposal key={id} id={id} updated={() => { if (!pending.current) void send(false, '字段方案已处理，请继续整理。'); }} />)}
         {error && <div role="alert" style={{ textAlign: 'center', color: 'var(--red)', padding: '2rem' }}>{error}</div>}</div>
       <div id="child-preview" style={{ display: preview ? undefined : 'none', padding: '0.5rem', border: '3px solid var(--black)', margin: '0.5rem' }}><div id="child-preview-content"><h4 style={{ fontWeight: 700, textTransform: 'uppercase' }}>Preview Changes</h4>
         {preview && ['title', 'status', 'tags', 'purpose', 'conclusion'].filter(key => preview[key]).map(key => <div key={key} style={{ margin: '0.3rem 0' }}><strong>{key}</strong>: {typeof preview[key] === 'string' ? preview[key] as string : JSON.stringify(preview[key])}</div>)}

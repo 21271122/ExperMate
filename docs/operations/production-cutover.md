@@ -12,7 +12,7 @@
 
 - 将本轮迁移与清理代码提交到 Git，并确认使用的发布提交。
 - 在服务器安装 Python 3.12+ 与项目依赖，构建或部署 `frontend/dist/`。
-- 一同部署 `static/`、`ai-shell/`、`templates/` 等资源；Node.js 仅在构建前端时需要。
+- 一同部署完整 `frontend/dist/`（包括 `.vite/manifest.json`、图片与音频）、`frontend/src/features/print/templates/` 和 `frontend/licenses/`；Node.js 仅在构建前端时需要。不再依赖旧 `static/`、`ai-shell/`、`templates/` 资源目录。
 - 为服务建立独立操作系统账号，限制代码、配置、数据库、恢复密钥与备份目录权限。
 
 ## 3. 配置服务端

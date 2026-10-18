@@ -19,8 +19,8 @@ dependencies = [
     "argon2-cffi>=21.0",
     "openpyxl>=3.1",
     "pypdf>=4.0",
+    "pypdfium2==5.6.0",
     "pillow>=10.0",
-    "pytesseract>=0.3",
 ]
 
 [project.optional-dependencies]

@@ -20,6 +20,17 @@
   --border: 4px;
   --border-thick: 6px;
   --border-heavy: 12px;
+  --border-fine: 1px;
+  --border-control: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --type-caption: 0.75rem;
+  --type-body: 0.875rem;
+  --type-section: 1rem;
+  --type-title: 1.5rem;
   --shadow: 6px 6px 0px #111;
   --shadow-lg: 10px 10px 0px #111;
   --shadow-color: #111;               /* JS 内联 boxShadow 场景单独取色值 */

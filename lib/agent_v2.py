@@ -217,6 +217,7 @@ class ToolExecutor:
         self.analysis_store = analysis_store
         self.attachment_store = attachment_store
         self.registry = {
+            "propose_record_structure": lambda args, loop: {"error": "record_service_unavailable"},
             "load_reference": self._load_reference,
             "search_experiments": self._search_experiments,
             "start_record_thread": self._start_record_thread,
@@ -252,6 +253,20 @@ class ToolExecutor:
         if name not in self.registry:
             return {"error": "unknown_tool",
                     "message": f"未知工具 '{name}'，可用: {list(self.registry.keys())}"}
+        if loop and getattr(loop, 'record_svc', None):
+            from lib.core.record_tools import CONTENT_TOOLS
+            allowed = {tool['function']['name'] for tool in loop._get_active_tools()}
+            if name not in allowed:
+                return {'error': 'tool_not_allowed'}
+            scope_error = self._child_scope_error(name, args, loop)
+            if scope_error:
+                return scope_error
+            if name in CONTENT_TOOLS or name == 'generate_record':
+                try:
+                    from lib.services.record_agent import execute_record_tool
+                    return execute_record_tool(loop, name, args)
+                except (ValueError, KeyError) as error:
+                    return {'error': getattr(error, 'code', 'invalid_record_operation'), 'message': str(error)}
         schema = self._tool_schema(name)
         required = schema.get("required", [])
         for key in required:
@@ -290,7 +305,7 @@ class ToolExecutor:
         if name in ("search_experiments", "list_experiments", "search_chat_history",
                     "read_chat_history", "list_chat_sessions", "browse_chat_history"):
             return {"error": "child_scope_restricted", "message": "实验编辑助手只处理当前实验，不能检索其他实验或全局聊天记录。"}
-        if name in ("read_experiment", "modify_experiment", "manage_archive"):
+        if name in ("read_experiment", "modify_experiment", "manage_archive", "propose_record_structure"):
             refs = [str(ref).strip() for ref in args.get("refs", []) if str(ref).strip()]
             if refs != [exp_id]:
                 return {"error": "child_scope_restricted", "message": f"实验编辑助手只能操作当前实验 {exp_id}。"}
@@ -787,7 +802,7 @@ class ToolExecutor:
     def _read_experiment(self, args: dict, loop: "AgentLoop") -> dict:
         refs = args.get("refs", [])
         requested = args.get("fields") or []
-        allowed = {"id", "revision", "created_at", "updated_at", *FIELD_DEFAULTS.keys()}
+        allowed = {"id", "revision", "created_at", "updated_at", "document", "format_version", "summary_text", *FIELD_DEFAULTS.keys()}
         fields = [str(field) for field in requested if str(field) in allowed]
         if requested and not fields:
             return {"error": "invalid_fields", "message": "未请求到可读取的实验字段"}
@@ -799,7 +814,9 @@ class ToolExecutor:
             if not exp:
                 result[exp_id] = {"error": "not_found"}
                 continue
-            selected = fields or ["id", "revision", "created_at", "updated_at", *FIELD_DEFAULTS.keys()]
+            if getattr(loop, 'record_svc', None):
+                exp = loop.record_svc.get('experiment', exp_id)
+            selected = fields or list(allowed)
             data = {field: deepcopy(exp.get(field)) for field in selected if field in exp}
             if args.get("include_updates") and self.update_log_store:
                 data["recent_updates"] = self.update_log_store.list_recent(exp_id, limit=3)
@@ -807,7 +824,7 @@ class ToolExecutor:
             if args.get("as_reference") and exp_id not in loop.references:
                 loop.references.append(exp_id)
                 registered_references.append(exp_id)
-            if args.get("as_reference") and loop.experiment_type == "other":
+            if args.get("as_reference") and loop.experiment_type == "other" and not getattr(loop, 'record_svc', None):
                 for tag in exp.get("tags") or []:
                     if tag in ("photocatalysis", "hydrothermal", "sol-gel",
                                "spin-coating", "ball-milling", "electrochemistry",
@@ -949,6 +966,13 @@ class ToolExecutor:
         mime = meta.get("mime", "")
         name = meta.get("name", "")
         suffix = Path(name).suffix.lower()
+        if getattr(loop, 'record_svc', None) and (mime.startswith('image/') or mime == 'application/pdf' or suffix in ('.pdf', '.png', '.jpg', '.jpeg', '.tiff', '.tif', '.webp', '.bmp')):
+            from lib.services.attachment_reader import read_visual_attachment
+            from lib.services.record_agent import record_status
+            context = record_status(loop) if loop.record_draft_id else '整理当前实验附件；不改写原始事实。'
+            return read_visual_attachment(loop.llm, content, meta, sha256,
+                                          start_page=args.get('start_page', 1), page_count=args.get('page_count', 3),
+                                          context=context)
         is_xlsx = suffix == ".xlsx" or mime in (
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
@@ -1213,7 +1237,7 @@ class ToolExecutor:
         """引用快照保留全部结构化字段，不能丢失实验员、附件等继承信息。"""
         result = {
             field: deepcopy(exp.get(field))
-            for field in ("id", "revision", "created_at", "updated_at", *FIELD_DEFAULTS.keys())
+            for field in ("id", "revision", "created_at", "updated_at", "document", "format_version", "summary_text", *FIELD_DEFAULTS.keys())
             if field in exp
         }
         # 追加最近更新日志摘要
@@ -1444,10 +1468,12 @@ class AgentLoop:
                  thread_store=None, update_log_store=None,
                  favorites_store=None, analysis_store=None,
                   analysis_svc=None, extraction_svc=None,
-                  attachment_store=None,
+                  attachment_store=None, record_svc=None,
                   context_compression_trigger_tokens: int = _DEFAULT_CONTEXT_COMPRESSION_TRIGGER_TOKENS,
                   context_compression_chunk_tokens: int = _DEFAULT_CONTEXT_COMPRESSION_CHUNK_TOKENS):
         self.llm = llm_client
+        self.record_svc = record_svc
+        self.record_draft_id = None
         self.store = experiment_store
         self._schema_context = None  # 16-field dict — only non-None in record mode
         self.history = []           # [{role, content, tool_calls?, tool_call_id?}]
@@ -1683,15 +1709,32 @@ class AgentLoop:
             return "general"
         return self.thread.type or "general"
 
+    def _system_prompt(self):
+        if self.record_svc:
+            from lib.core.record_tools import RECORD_PROMPT
+            return RECORD_PROMPT
+        return build_system_prompt(self.child.agent_role)
+
     def _enter_record_mode(self) -> None:
         """初始化 Schema 上下文（仅 record 模式）。"""
         self._schema_context = deepcopy(DEFAULT_CONTEXT)
+        if self.record_svc:
+            self.record_draft_id = self.record_svc.create_draft({})['id']
 
     def _exit_record_mode(self) -> None:
         """清理 Schema 上下文。"""
         self._schema_context = None
 
     def _get_active_tools(self) -> list[dict]:
+        tools = self._legacy_active_tools()
+        if not self.record_svc: return tools
+        from lib.core.record_tools import CONTENT_TOOLS
+        tools = [CONTENT_TOOLS.get(item['function']['name'], item) for item in tools]
+        if self.child.agent_role == 'exp_editor' or (not self.child.agent_role and self.mode in ('general', 'record')):
+            tools.append(CONTENT_TOOLS['propose_record_structure'])
+        return tools
+
+    def _legacy_active_tools(self) -> list[dict]:
         """返回当前模式或子 Agent 角色可用的工具列表。"""
         # 子 Agent 角色优先 —— 返回固定工具清单，不走 mode 推断
         if self.child.agent_role == "analysis_reviewer":
@@ -1758,7 +1801,7 @@ class AgentLoop:
 
             # 构建 LLM 消息：稳定前缀在前，按请求变化的状态与时间置后，便于服务端提示词缓存。
             messages = [
-                {"role": "system", "content": build_system_prompt(self.child.agent_role)},
+                {"role": "system", "content": self._system_prompt()},
             ]
             if self._session_summary:
                 messages.append({"role": "system", "content": f"[当前会话历史摘要]\n{self._session_summary}"})
@@ -1842,7 +1885,7 @@ class AgentLoop:
             for tc in (resp_tool_calls or []):
                 name = tc["function"]["name"]
                 raw_args_str = tc["function"]["arguments"]
-                if name in ("update_schema", "analyze"):
+                if name in ("update_schema", "propose_record_structure", "modify_experiment", "analyze"):
                     has_record_tool = True
                 try:
                     args, parse_error = json.loads(raw_args_str), None
@@ -1979,7 +2022,7 @@ class AgentLoop:
             self._maybe_inject_thread_start()
             self._repair_history_before_llm()
 
-            messages = [{"role": "system", "content": build_system_prompt(self.child.agent_role)}]
+            messages = [{"role": "system", "content": self._system_prompt()}]
             if self._session_summary:
                 messages.append({"role": "system", "content": f"[当前会话历史摘要]\n{self._session_summary}"})
             messages.extend(self._llm_history(self.history))
@@ -2066,7 +2109,7 @@ class AgentLoop:
             for tc in (resp_tool_calls or []):
                 name = tc["function"]["name"]
                 raw_args_str = tc["function"]["arguments"]
-                if name in ("update_schema", "analyze"):
+                if name in ("update_schema", "propose_record_structure", "modify_experiment", "analyze"):
                     has_record_tool = True
                 try:
                     args, parse_error = json.loads(raw_args_str), None
@@ -2174,6 +2217,9 @@ class AgentLoop:
     # -- Step 1.4: Schema 状态摘要 --
 
     def _build_schema_status(self) -> str:
+        if self.record_svc:
+            from lib.services.record_agent import record_status
+            return record_status(self)
         """生成 Schema 状态摘要，注入 messages。LLM 直接读这个判断缺什么。"""
         schema_fields = [
             ("title", "标题"), ("date", "日期"), ("experimenter", "实验者"),
@@ -2319,6 +2365,8 @@ class AgentLoop:
     def _build_thread_guidance(self, thread_type: str) -> dict:
         """生成线程模式引导消息。"""
         if thread_type == "record":
+            if self.record_svc:
+                return {'role': 'system', 'content': '你正在整理当日实际实验。只记录有来源的信息；结构用 propose_record_structure 交用户手动确认，普通内容直接保存。不按固定字段清单追问；整理完成即可 generate_record。'}
             return {"role": "system",
                     "content": "你正在记录一条新实验。优先收集材料、步骤、参数、结果。追问缺失的关键字段。目标：generate_record。"}
         elif thread_type == "analyze":
@@ -2352,6 +2400,8 @@ class AgentLoop:
                 "要跨实验分析时调用 start_analyze_thread。"
             )
         if self.thread.type == "record":
+            if self.record_svc:
+                return '[系统状态] record 线程进行中。以服务端草稿和待批方案为准，旧固定字段清单和完整度追问规则已失效。结构变更等待手动确认，内容更新直接保存。'
             return (
                 "[系统状态] record 线程进行中。"
                 "持续收集实验信息，缺失关键字段时追问。目标：generate_record。"
@@ -2499,6 +2549,7 @@ class AgentLoop:
         child = cls(
             parent_loop.llm,
             parent_loop.store,
+            record_svc=parent_loop.record_svc,
             thread_store=parent_loop.thread_store,
             update_log_store=parent_loop.update_log_store,
             favorites_store=getattr(parent_loop.tools, 'favorites_store', None),
@@ -2519,14 +2570,14 @@ class AgentLoop:
     def create_legacy_child_agent(cls, llm_client, store, exp_data: dict,
                                    thread_store=None, update_log_store=None,
                                    favorites_store=None,
-                                   analysis_store=None, attachment_store=None) -> "AgentLoop":
+                                   analysis_store=None, attachment_store=None, record_svc=None) -> "AgentLoop":
         """为无线程关联的旧实验创建子 Agent，并注入 EXP 结构化数据。"""
         child = cls(llm_client, store,
                     thread_store=thread_store,
                     update_log_store=update_log_store,
                     favorites_store=favorites_store,
                     analysis_store=analysis_store,
-                    attachment_store=attachment_store)
+                    attachment_store=attachment_store, record_svc=record_svc)
         # 注入 EXP 数据作为上下文
         child._append_history({
             "role": "system",
@@ -2614,7 +2665,7 @@ class AgentLoop:
 
     def _estimate_request_tokens(self) -> int:
         """估算下一次 LLM 请求的全部组成，而非仅 history 正文。"""
-        messages = [{"role": "system", "content": build_system_prompt(self.child.agent_role)}]
+        messages = [{"role": "system", "content": self._system_prompt()}]
         if self._session_summary:
             messages.append({"role": "system", "content": f"[当前会话历史摘要]\n{self._session_summary}"})
         messages.extend(self._llm_history(self.history))
@@ -2709,6 +2760,7 @@ class AgentLoop:
     def state_to_dict(self) -> dict:
         return {
             "context": self._schema_context,
+            "record_draft_id": self.record_draft_id,
             "references": self.references,
             "experiment_type": self.experiment_type,
             "turn_count": self.turn_count,
@@ -2737,13 +2789,13 @@ class AgentLoop:
     def from_dict(cls, llm_client, store, data: dict,
                   thread_store=None, update_log_store=None,
                   favorites_store=None, analysis_store=None,
-                  analysis_svc=None, extraction_svc=None, attachment_store=None,
+                  analysis_svc=None, extraction_svc=None, attachment_store=None, record_svc=None,
                   context_compression_trigger_tokens: int = _DEFAULT_CONTEXT_COMPRESSION_TRIGGER_TOKENS,
                   context_compression_chunk_tokens: int = _DEFAULT_CONTEXT_COMPRESSION_CHUNK_TOKENS) -> "AgentLoop":
         loop = cls(llm_client, store, thread_store=thread_store, update_log_store=update_log_store,
                    favorites_store=favorites_store, analysis_store=analysis_store,
                    analysis_svc=analysis_svc, extraction_svc=extraction_svc,
-                   attachment_store=attachment_store,
+                   attachment_store=attachment_store, record_svc=record_svc,
                    context_compression_trigger_tokens=context_compression_trigger_tokens,
                    context_compression_chunk_tokens=context_compression_chunk_tokens)
         # 向后兼容：旧的 context 可能为空 dict（不是 None），按 None 处理
@@ -2753,6 +2805,17 @@ class AgentLoop:
         else:
             loop._schema_context = None
         loop.references = data.get("references", [])
+        loop.record_draft_id = data.get("record_draft_id")
+        migrated_record_state = False
+        if record_svc and not loop.record_draft_id and data.get('_thread_type') == 'record':
+            from lib.services.record_projection import legacy_document
+            metadata = {key: ctx[key] for key in ('title', 'date', 'experimenter', 'status', 'tags') if key in (ctx or {})}
+            draft = record_svc.create_draft(metadata)
+            loop.record_draft_id = draft['id']
+            document = legacy_document(ctx or {})
+            if any(section['fields'] for section in document['sections']):
+                record_svc.propose('draft', draft['id'], 1, document)
+            migrated_record_state = True
         loop.experiment_type = data.get("experiment_type", "other")
         loop.turn_count = data.get("turn_count", 0)
         loop._llm_call_seq = data.get("llm_call_seq", 0)
@@ -2792,4 +2855,6 @@ class AgentLoop:
         if repaired_history or removed_legacy_l0:
             loop._persist_repaired_state()
 
+        if migrated_record_state:
+            loop._persist_repaired_state()
         return loop

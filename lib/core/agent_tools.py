@@ -466,8 +466,8 @@ TOOL_READ_ATTACHMENT = {
     "type": "function",
     "function": {
         "name": "read_attachment",
-        "description": "读取 TXT、CSV、XLSX 或 PDF 的可提取文本。XLSX 按工作表独立截断，"
-                       "可指定工作表并按行继续读取。图片会直接交给当前 Agent 模型进行视觉识别，不使用 OCR；"
+        "description": "读取 TXT、CSV、XLSX。XLSX 按工作表独立截断，"
+                       "可指定工作表并按行继续读取。图片和 PDF 页面直接交给当前模型进行原生视觉阅读，不使用 OCR；可按页继续，结果说明未读范围。"
                        "若当前模型不支持视觉，会明确返回该提示。"
                        "如需关联实验，使用 manage_attachment。",
         "parameters": {
@@ -477,6 +477,8 @@ TOOL_READ_ATTACHMENT = {
                 "max_chars": {"type": "integer", "description": "最多读取字符数；XLSX 为每个工作表的上限，默认 4000，最大 30000；其他文件默认 12000"},
                 "sheet": {"type": "string", "description": "仅 XLSX：指定要读取的工作表名称；省略则读取每个工作表的独立预览"},
                 "start_row": {"type": "integer", "description": "仅 XLSX：从第几行开始读取，默认 1；用于继续读取被截断的工作表"},
+                "start_page": {"type": "integer", "description": "图片/PDF 从第几页开始原生视觉阅读，默认 1"},
+                "page_count": {"type": "integer", "description": "图片/PDF 本次读取页数，1～6，默认 3；根据 next_page 继续"},
             },
             "required": ["sha256"],
         },

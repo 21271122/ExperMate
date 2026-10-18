@@ -44,7 +44,7 @@ export function ShellDialogs() {
             {"本项目截至 2026 年 8 月底，共耗时 4 个月，消耗 60 亿+ tokens。如果觉得项目有帮助，可否小小补贴一下 token 的开销？"}
           </p>
           <div className={"support-qr-wrap"}>
-            <img id={"support-qr"} alt={"支持 ExperMate 的收款二维码"} hidden={!configured} src={configured ? '/static/img/support-qr.png' : undefined} />
+            <img id={"support-qr"} alt={"支持 ExperMate 的收款二维码"} hidden={!configured} src={configured ? '/app/img/support-qr.png' : undefined} />
             <span id={"support-qr-placeholder"} className={"support-qr-placeholder"} hidden={configured}>
               {"收款码待接入"}
             </span>

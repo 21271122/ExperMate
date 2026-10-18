@@ -1,0 +1,24 @@
+.detail-attachments { container-type: inline-size; container-name: attachments; font-family: var(--font-ui,sans-serif); font-size: var(--type-body,.875rem); min-width: 0; }
+.detail-attachments, .detail-attachments * { box-sizing: border-box; }
+.detail-attachments > summary { padding: var(--space-2,8px) 0; border-bottom: var(--border-control,2px) solid var(--black,#111); font-size: var(--type-section,1rem); font-weight: 800; cursor: pointer; }
+.detail-attachments #attachment-count { color: var(--text-2,#666); font-size: var(--type-caption,.75rem); margin-left: var(--space-1,4px); }
+.detail-attachments #attachment-list { display: grid; gap: var(--space-2,8px); margin: var(--space-3,12px) 0; }
+.detail-attachments .attachment-compose > summary { display: inline-flex; align-items: center; gap: var(--space-2,8px); min-height: 44px; margin: 0; padding: var(--space-2,8px) 0; border: 0; font-size: var(--type-body,.875rem); font-weight: 700; cursor: pointer; list-style: none; }
+.attachment-compose > summary::-webkit-details-marker { display: none; }
+.attachment-compose > summary::before { content: '+'; color: var(--blue,#1d54a6); font-size: var(--type-section,1rem); }
+.attachment-compose[open] > summary::before { content: '−'; }
+.detail-attachments #attachment-upload-form { display: grid; gap: var(--space-4,16px); padding: var(--space-4,16px); background: var(--off-white,#f4f4f4); }
+.attachment-file-field, .attachment-title-field { min-width: 0; }
+.attachment-control-label { display: block; margin-bottom: var(--space-2,8px); font-size: var(--type-body,.875rem); font-weight: 700; }
+.attachment-optional { margin-left: var(--space-1,4px); color: var(--text-2,#666); font-size: var(--type-caption,.75rem); font-weight: 400; }
+.attachment-file-picker { display: flex; align-items: center; gap: var(--space-3,12px); min-width: 0; }
+.detail-attachments #attachment-file-selection { min-width: 0; color: var(--text-2,#666); line-height: 1.5; overflow-wrap: anywhere; }
+.detail-attachments #attachment-upload-form button { flex-shrink: 0; min-height: 44px; max-width: 100%; padding: var(--space-2,8px) var(--space-4,16px); border: var(--border-control,2px) solid var(--black,#111); font: inherit; font-weight: 700; letter-spacing: normal; white-space: nowrap; }
+.detail-attachments #attachment-title { width: 100%; min-width: 0; height: 44px; padding: var(--space-2,8px); border: var(--border-control,2px) solid var(--black,#111); border-radius: 0; font: inherit; background: var(--white,#fff); color: var(--black,#111); }
+.attachment-upload-actions { display: flex; justify-content: flex-end; padding-top: var(--space-3,12px); border-top: var(--border-fine,1px) solid var(--divider,#ddd); }
+.detail-attachments #attachment-status { color: var(--text-2,#666); font-size: var(--type-caption,.75rem); overflow-wrap: anywhere; }
+.attachment-upload-help { display: block; margin-top: var(--space-2,8px); color: var(--text-2,#666); font-size: var(--type-caption,.75rem); line-height: 1.6; }
+.detail-attachments :is(button,input,summary):focus-visible { outline: var(--border-control,2px) solid var(--blue,#1d54a6); outline-offset: 2px; }
+@container attachments (max-width: 400px) {
+  .detail-attachments #attachment-upload-btn { width: 100%; }
+}

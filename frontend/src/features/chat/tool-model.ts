@@ -7,6 +7,7 @@ export type ToolResult = {
   action?: string; track?: { title?: string }; current?: { enabled?: boolean }; tracks?: unknown[];
   count?: number; experiments?: SelectorItem[]; items?: SelectorItem[]; preselected?: string[];
   status?: string; selected_ids?: string[]; _tcId?: string;
+  proposal_id?: string; draft_id?: string; target_kind?: 'draft' | 'experiment';
 };
 
 export type ToolActions = {

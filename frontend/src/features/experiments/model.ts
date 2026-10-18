@@ -2,6 +2,7 @@ export type Experiment = {
   id: string; title?: string; date?: string; end_date?: string; status?: string;
   experimenter?: string; archived?: boolean | number | string; tags?: string[];
   purpose?: string; conclusion?: string; sop?: string[];
+  format_version?: number; summary_text?: string;
   materials?: { name?: string }[]; observations?: { items?: string[] };
 };
 export type ListData = {
@@ -20,7 +21,7 @@ export function matches(exp: Experiment, filters: Filters) {
   const { query, status, tags, dateFrom, dateTo } = filters;
   if (isArchived(exp) !== (status === 'archived')) return false;
   if (status && status !== 'archived' && exp.status !== status) return false;
-  const text = [exp.id, exp.title, exp.purpose, exp.conclusion, exp.experimenter,
+  const text = [exp.id, exp.title, exp.purpose, exp.conclusion, exp.experimenter, exp.summary_text,
     ...(exp.tags || []), ...(exp.sop || []), ...(exp.materials || []).map(m => m.name),
     ...(exp.observations?.items || [])].join(' ').toLowerCase();
   if (query.trim() && !text.includes(query.trim().toLowerCase())) return false;

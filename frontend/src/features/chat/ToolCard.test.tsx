@@ -13,6 +13,13 @@ function mountCard(result: ToolResult) {
   return { ...view, resolveSelector, send, api, user: userEvent.setup() };
 }
 
+test('草稿修订回执明确区分正式实验，不显示内部草稿编号', () => {
+  const view = mountCard({ display: 'diff', target_kind: 'draft', draft_id: 'internal-draft-id', changes: [{ field: '修订', old: '1', new: '2' }] });
+  expect(screen.getByText('草稿已保存')).toBeInTheDocument();
+  expect(view.container).toHaveTextContent('修订');
+  expect(view.container).not.toHaveTextContent('internal-draft-id');
+});
+
 test('工具卡片使用正常链接，查询结果通过模块接口导航', async () => {
   const navigate = vi.fn(); Object.assign(services, { PanelManager: { navigate } });
   const view = mountCard({ display: 'list', experiments: [{ id: 'A/B', title: 'Result' }] });

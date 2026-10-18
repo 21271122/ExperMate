@@ -15,6 +15,7 @@ __pycache__/
 !/tests/test_sqlite_backend.py
 !/tests/test_server_runtime.py
 !/tests/test_workspace_import.py
+!/tests/test_record_document.py
 /design-explorations/
 /snapshot_data.py
 /run.bat

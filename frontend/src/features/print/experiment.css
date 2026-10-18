@@ -1,0 +1,72 @@
+  @page { margin: 2cm; size: A4; }
+  body {
+    font-family: "Times New Roman", "SimSun", serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: #000;
+  }
+  h1 { font-size: 18pt; text-align: center; border-bottom: 2px solid #333; padding-bottom: 0.5em; margin-top: 0; }
+  h2 { font-size: 14pt; margin-top: 1.5em; border-bottom: 1px solid #999; padding-bottom: 0.2em; page-break-after: avoid; }
+  h3 { font-size: 12pt; margin-top: 1em; }
+  .meta { text-align: center; font-size: 9pt; color: #555; margin-bottom: 2em; }
+  .meta span { margin: 0 0.5em; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    border-top: 2px solid #333;
+    border-bottom: 2px solid #333;
+    margin: 1em 0;
+    page-break-inside: avoid;
+  }
+  table thead { border-bottom: 1px solid #333; }
+  table th, table td { padding: 0.4em 0.6em; text-align: left; border: none; font-size: 10pt; }
+  table th { font-weight: 600; }
+  table tbody tr { border: none; }
+  table tbody tr:nth-child(even) { background: none; }
+  ol, ul { margin: 0.5em 0; padding-left: 1.5em; }
+  li { margin-bottom: 0.3em; }
+  img { max-width: 100%; height: auto; }
+  .no-print { display: none; }
+  .section { margin-bottom: 1.5em; }
+  .tag-pill { display: inline; padding: 0 0.3em; font-size: 9pt; }
+  .print-btn {
+    display: inline-block;
+    padding: 0.6em 1.5em;
+    font-size: 12pt;
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    background: #0071e3;
+    color: #fff;
+    font-weight: 500;
+  }
+  .print-btn:hover { background: #005bb5; }
+  .print-guide {
+    display: block;
+    margin-bottom: 2em;
+    padding: 1.2em 1.5em;
+    background: #e8f4fd;
+    border: 1px solid #b8d8f0;
+    border-radius: 8px;
+    font-size: 11pt;
+    color: #1a3a5c;
+    line-height: 1.8;
+  }
+  .print-guide ol { margin: 0.5em 0 0.5em 1.2em; padding: 0; }
+  .print-guide ol li { margin-bottom: 0.3em; }
+  .print-guide strong { color: #005bb5; }
+
+  @media screen {
+    body { background: #f5f5f5; padding: 2em 0; }
+    .print-wrapper {
+      max-width: 210mm;
+      margin: 0 auto;
+      background: #fff;
+      padding: 2cm;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+  }
+  @media print {
+    .print-btn, .print-guide { display: none; }
+    .print-wrapper { padding: 0; box-shadow: none; }
+  }

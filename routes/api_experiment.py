@@ -29,6 +29,16 @@ def api_parse():
         msg = '未配置 DeepSeek API Key。请点击导航栏的"设置"按钮配置 API Key。'
         return jsonify({"ok": False, "error": msg}), 500
 
+    if getattr(g, 'record_svc', None):
+        from lib.core.record_document import RecordDocument
+        from lib.core.record_tools import RECORD_PROMPT
+        document = llm.structured_extract(notes_plain, RECORD_PROMPT, RecordDocument.model_json_schema())
+        draft = g.record_svc.create_draft({})
+        draft['original_input'] = notes_raw
+        g.record_svc.storage.save_draft(draft)
+        proposal = g.record_svc.propose('draft', draft['id'], draft['revision'], document)
+        return jsonify(ok=True, draft_id=draft['id'], proposal_id=proposal['id'], data=proposal)
+
     try:
         result = parse_notes(notes_plain, llm)
     except Exception as e:
@@ -45,6 +55,16 @@ def api_parse_confirm():
     data = request.get_json()
     if not data or not isinstance(data, dict):
         return jsonify({"ok": False, "error": "无效的实验数据"}), 400
+    if getattr(g, 'record_svc', None):
+        if not all(key in data for key in ('draft_id', 'expected_revision', 'request_id')):
+            return jsonify(error={'code': 'use_record_draft', 'message': '请先确认草稿结构，再发布记录。'}), 409
+        from lib.services.record_document import RecordError
+        try:
+            record = g.record_svc.publish(data['draft_id'], data['expected_revision'], data['request_id'])
+        except RecordError as error:
+            return jsonify(error={'code': error.code, 'message': str(error)}), error.status
+        _notify_experiment_created(record['id'])
+        return jsonify(ok=True, exp_id=record['id'])
 
     exp_id = data.get("id") or g.exp_repo.next_id()
     data["id"] = exp_id

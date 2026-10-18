@@ -1,5 +1,6 @@
 """React 只读迁移：真实 SQLite 作用域、Cookie 登录和静态入口回归。"""
 
+import json
 import sqlite3
 from io import BytesIO
 from pathlib import Path
@@ -233,7 +234,7 @@ def test_react_routes_and_missing_assets(react_app, tmp_path):
         assert client.get(path).status_code == 404
 
 
-def test_obsolete_frontend_is_retired_but_audio_and_print_remain(react_app):
+def test_public_resources_and_print_use_frontend_build(react_app):
     from routes.dashboard import dashboard_bp
 
     react_app.register_blueprint(dashboard_bp)
@@ -244,16 +245,53 @@ def test_obsolete_frontend_is_retired_but_audio_and_print_remain(react_app):
                  "/ai-shell/static/js/panel.js", "/static/js/edit-mode.js", "/static/js/attachment-viewer.js",
                  "/ai-shell/static/css/shell.css", "/static/css/experiments.css"):
         assert client.get(path).status_code == 404
-    for path in ("/static/vendor/marked/marked.min.js", "/static/img/favicon.png",
-                 "/ai-shell/static/audio/uisfx/zen-01-general.mp3"):
-        assert client.get(path).status_code == 200
+    dist = react_app.config["REACT_DIST_DIR"]
+    (dist / ".vite").mkdir(parents=True)
+    (dist / "assets").mkdir()
+    (dist / "img").mkdir()
+    (dist / "audio/uisfx").mkdir(parents=True)
+    (dist / "img/favicon.png").write_bytes(b"image fixture")
+    (dist / "audio/uisfx/zen-01-general.mp3").write_bytes(b"audio fixture")
+    manifest = {}
+    for kind in ("experiment", "analysis"):
+        (dist / "assets" / f"{kind}.js").write_text("// print fixture", encoding="utf-8")
+        (dist / "assets" / f"{kind}.css").write_text("body {color: black}", encoding="utf-8")
+        manifest[f"src/features/print/{kind}.ts"] = {
+            "file": f"assets/{kind}.js", "css": [f"assets/{kind}.css"]}
+    (dist / ".vite/manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    for old, new, content in [
+        ("/static/img/favicon.png", "/app/img/favicon.png", b"image fixture"),
+        ("/ai-shell/static/audio/uisfx/zen-01-general.mp3", "/app/audio/uisfx/zen-01-general.mp3", b"audio fixture"),
+    ]:
+        response = client.get(old)
+        assert response.status_code == 308 and response.headers["Location"] == new
+        assert client.get(new).data == content
+    for path in ("/static/vendor/marked/marked.min.js", "/static/vendor/htmx/htmx.min.js",
+                 "/app/img/missing.png", "/app/audio/../index.html", "/app/img/../.vite/manifest.json"):
+        assert client.get(path).status_code == 404
     login(client)
-    assert client.get("/experiments/A-00/print").status_code == 200
+    response = client.get("/experiments/A-00/print")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert '/app/assets/experiment.js' in html and '/app/assets/experiment.css' in html
+    assert 'private full text' in html and '1. 目的' in html
+    assert 'marked.min.js' not in html and 'onclick=' not in html and '<style>' not in html
+    assert client.get('/app/assets/experiment.js').status_code == 200
+    assert client.get('/app/assets/experiment.css').status_code == 200
     with react_app.test_request_context():
         react_app.preprocess_request()
         g.user_id = "alice"
         g.analysis_repo.save({"id": "PRINT-1", "analysis": "Print fixture", "selected_ids": []})
-    assert client.get("/experiments/analysis/PRINT-1/print").status_code == 200
+    response = client.get("/experiments/analysis/PRINT-1/print")
+    assert response.status_code == 200
+    assert '/app/assets/analysis.js' in response.get_data(as_text=True)
+    assert 'Print fixture' in response.get_data(as_text=True)
+    login(client, 'bob')
+    assert client.get('/experiments/A-00/print').status_code == 404
+    assert client.get('/experiments/analysis/PRINT-1/print').status_code == 404
+    login(client)
+    (dist / '.vite/manifest.json').unlink()
+    assert client.get('/experiments/A-00/print').status_code == 503
 
 
 def test_form_apis_no_longer_render_removed_templates(react_app, monkeypatch):

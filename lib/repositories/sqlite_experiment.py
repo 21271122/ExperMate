@@ -22,7 +22,7 @@ _JSON_FIELDS: set[str] = {
     "field_updated_at",
 }
 
-_SCHEMA_VERSION = 6
+_SCHEMA_VERSION = 7
 
 
 class SqliteExperimentRepository(AbstractExperimentRepository, UserScopeMixin):
@@ -37,7 +37,6 @@ class SqliteExperimentRepository(AbstractExperimentRepository, UserScopeMixin):
 
     def _create_tables(self) -> None:
         self.db.execute(SQL_CREATE_EXPERIMENTS)
-        self.db.execute(SQL_CREATE_FTS)
         self.db.execute("""CREATE TABLE IF NOT EXISTS experiment_id_counters (
             year TEXT NOT NULL, device_code TEXT NOT NULL, next_number INTEGER NOT NULL,
             PRIMARY KEY (year, device_code)
@@ -50,7 +49,6 @@ class SqliteExperimentRepository(AbstractExperimentRepository, UserScopeMixin):
                 self.db.execute("ALTER TABLE experiments ADD COLUMN user_id TEXT DEFAULT ''")
             except sqlite3.OperationalError:
                 pass
-            self.db.execute("INSERT INTO experiments_fts(experiments_fts) VALUES('rebuild')")
         if cur < 3:
             try:
                 self.db.execute("ALTER TABLE experiments ADD COLUMN field_updated_at TEXT DEFAULT '{}'")
@@ -71,20 +69,34 @@ class SqliteExperimentRepository(AbstractExperimentRepository, UserScopeMixin):
             except sqlite3.OperationalError:
                 pass
             self.db.execute("CREATE INDEX IF NOT EXISTS idx_exp_archived ON experiments(user_id, archived)")
+        if cur < 7:
+            columns = {row[1] for row in self.db.execute('PRAGMA table_info(experiments)').fetchall()}
+            for key, definition in {
+                'format_version': 'INTEGER NOT NULL DEFAULT 1', 'document_json': 'TEXT DEFAULT NULL',
+                'summary_text': "TEXT NOT NULL DEFAULT ''", 'search_text': "TEXT NOT NULL DEFAULT ''",
+            }.items():
+                if key not in columns:
+                    self.db.execute(f'ALTER TABLE experiments ADD COLUMN {key} {definition}')
+            for trigger in ('exp_fts_insert', 'exp_fts_delete', 'exp_fts_update'):
+                self.db.execute(f'DROP TRIGGER IF EXISTS {trigger}')
+            self.db.execute('DROP TABLE IF EXISTS experiments_fts')
+        self.db.execute(SQL_CREATE_FTS)
+        if cur < 7:
+            self.db.execute("INSERT INTO experiments_fts(experiments_fts) VALUES('rebuild')")
         if cur < _SCHEMA_VERSION:
             self.db.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
         # FTS 触发器：INSERT OR REPLACE 后自动更新全文索引
         self.db.execute("""CREATE TRIGGER IF NOT EXISTS exp_fts_insert AFTER INSERT ON experiments BEGIN
-            INSERT INTO experiments_fts(rowid, title, purpose, conclusion, original_notes)
-            VALUES (new.rowid, new.title, new.purpose, new.conclusion, new.original_notes); END;""")
+            INSERT INTO experiments_fts(rowid, title, purpose, conclusion, original_notes, search_text)
+            VALUES (new.rowid, new.title, new.purpose, new.conclusion, new.original_notes, new.search_text); END;""")
         self.db.execute("""CREATE TRIGGER IF NOT EXISTS exp_fts_delete AFTER DELETE ON experiments BEGIN
-            INSERT INTO experiments_fts(experiments_fts, rowid, title, purpose, conclusion, original_notes)
-            VALUES ('delete', old.rowid, old.title, old.purpose, old.conclusion, old.original_notes); END;""")
+            INSERT INTO experiments_fts(experiments_fts, rowid, title, purpose, conclusion, original_notes, search_text)
+            VALUES ('delete', old.rowid, old.title, old.purpose, old.conclusion, old.original_notes, old.search_text); END;""")
         self.db.execute("""CREATE TRIGGER IF NOT EXISTS exp_fts_update AFTER UPDATE ON experiments BEGIN
-            INSERT INTO experiments_fts(experiments_fts, rowid, title, purpose, conclusion, original_notes)
-            VALUES ('delete', old.rowid, old.title, old.purpose, old.conclusion, old.original_notes);
-            INSERT INTO experiments_fts(rowid, title, purpose, conclusion, original_notes)
-            VALUES (new.rowid, new.title, new.purpose, new.conclusion, new.original_notes); END;""")
+            INSERT INTO experiments_fts(experiments_fts, rowid, title, purpose, conclusion, original_notes, search_text)
+            VALUES ('delete', old.rowid, old.title, old.purpose, old.conclusion, old.original_notes, old.search_text);
+            INSERT INTO experiments_fts(rowid, title, purpose, conclusion, original_notes, search_text)
+            VALUES (new.rowid, new.title, new.purpose, new.conclusion, new.original_notes, new.search_text); END;""")
 
     def next_id(self) -> str:
         year = datetime.now().strftime("%Y")
@@ -103,6 +115,11 @@ class SqliteExperimentRepository(AbstractExperimentRepository, UserScopeMixin):
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         # 字段级 diff：加载旧记录，只给变化的字段打新时间戳
         old = self.load(exp_id, user_id=uid)
+        if experiment.get('format_version') == 2 or (old or {}).get('format_version') == 2:
+            if not old or experiment.get('document') != old.get('document') or any(
+                experiment.get(key) != old.get(key) for key in ('title', 'date', 'experimenter', 'status', 'tags')
+            ):
+                raise ValueError('V2 正文必须通过记录服务保存')
         fua = dict(old.get("field_updated_at", {}) if old else {})
         revision = int(old.get("revision", 0) or 0) + 1 if old else 1
         row: dict[str, Any] = {"user_id": uid, "id": exp_id, "updated_at": now,
@@ -142,6 +159,10 @@ class SqliteExperimentRepository(AbstractExperimentRepository, UserScopeMixin):
         old = self.load(exp_id, user_id=uid)
         if old is None:
             return {"ok": False, "error": "not_found"}
+        if old.get('format_version') == 2 and (
+            experiment.get('format_version') != 2 or experiment.get('document') != old.get('document')
+        ):
+            raise ValueError('V2 正文必须通过记录服务保存')
         actual_revision = int(old.get("revision", 0) or 0)
         if expected_revision != actual_revision:
             return {"ok": False, "error": "revision_conflict", "revision": actual_revision}
@@ -204,7 +225,7 @@ class SqliteExperimentRepository(AbstractExperimentRepository, UserScopeMixin):
             params.append(status)
         if query:
             escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            fields = ("id", "title", "experimenter", "tags", "purpose", "conclusion")
+            fields = ("id", "title", "experimenter", "tags", "purpose", "conclusion", "search_text")
             clauses.append("(" + " OR ".join(f"{field} LIKE ? ESCAPE '\\'" for field in fields) + ")")
             params.extend([f"%{escaped}%"] * len(fields))
         where = " AND ".join(clauses)
@@ -213,7 +234,7 @@ class SqliteExperimentRepository(AbstractExperimentRepository, UserScopeMixin):
         ).fetchone()[0]
         rows = self.db.execute(
             "SELECT id, title, date, experimenter, status, tags, archived, revision, "
-            f"substr(purpose, 1, 200) AS purpose FROM experiments WHERE {where} "
+            f"substr(CASE WHEN format_version=2 THEN summary_text ELSE purpose END, 1, 200) AS purpose, format_version, summary_text FROM experiments WHERE {where} "
             "ORDER BY date DESC, id DESC LIMIT ? OFFSET ?",
             [*params, page_size, (page - 1) * page_size],
         ).fetchall()
@@ -224,7 +245,7 @@ class SqliteExperimentRepository(AbstractExperimentRepository, UserScopeMixin):
         """实验列表首屏与本地筛选所需字段，避免传输完整实验正文。"""
         rows = self.db.execute(
             "SELECT id, title, date, experimenter, status, tags, purpose, conclusion, "
-            "sop, materials, observations, archived, archived_at "
+            "sop, materials, observations, archived, archived_at, format_version, summary_text "
             "FROM experiments WHERE user_id = ? "
             + ("" if include_archived else "AND archived = 0 ") + "ORDER BY id DESC",
             (self._uid(),),
@@ -313,6 +334,9 @@ class SqliteExperimentRepository(AbstractExperimentRepository, UserScopeMixin):
         parts: list[str] = []
         for r in rows:
             d = _row_to_dict(r)
+            if d.get('format_version') == 2:
+                parts.append(f"### {d['id']}: {d.get('title', '')}\n" + d.get('search_text', ''))
+                continue
             results = d.get("results", {}) or {}
             obs = d.get("observations", {}) or {}
             obs_items = obs.get("items", []) if isinstance(obs, dict) else []
@@ -337,6 +361,14 @@ def _rank_to_score(rank: float) -> float:
 
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     d = dict(row)
+    document = d.pop('document_json', None)
+    if document:
+        d['document'] = json.loads(document)
+    if d.get('format_version') == 2:
+        # Do not expose obsolete defaults as if they were facts of a V2 record.
+        for key in ('purpose', 'materials', 'equipment', 'experimental_plan', 'sop', 'process_parameters',
+                    'observations', 'characterization', 'results', 'conclusion', 'next_steps'):
+            d.pop(key, None)
     for key in _JSON_FIELDS:
         if key in d and isinstance(d[key], str):
             try:

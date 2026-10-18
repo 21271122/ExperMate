@@ -13,7 +13,7 @@ export async function requestJson(url: string, options: RequestInit = {}) {
   const body = await response.json();
   if (!response.ok || body.ok === false) {
     if (response.status === 401) services.showAuthModal?.();
-    throw new ApiError(body.error?.message || body.error || body.message || `请求失败 (${response.status})`, response.status, body.revision);
+    throw new ApiError(body.error?.message || body.error || body.message || `请求失败 (${response.status})`, response.status, body.revision ?? body.error?.revision);
   }
   return body;
 }

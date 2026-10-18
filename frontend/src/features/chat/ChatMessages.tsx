@@ -6,7 +6,7 @@ function ToolContent({ row }: { row: ChatRow }) {
   const { connection } = useChat();
   const card = <ToolCard result={row.tool} historical={row.historical} animate={row.animate} toolCallId={row.toolCallId} api={connection.ui} />;
   if (!hasToolCard(row.tool)) return card;
-  return <div className="msg-row tool"><div className="msg-wrap">
+  return <div className={`msg-row tool${row.tool?.display === 'structure_proposal' ? ' record-proposal-row' : ''}`}><div className="msg-wrap">
     <div className="msg-content">{card}</div>
     <time className="msg-time" dateTime={row.createdAt}>{formatTime(row.createdAt)}</time>
   </div></div>;

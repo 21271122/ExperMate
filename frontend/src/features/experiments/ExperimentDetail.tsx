@@ -7,6 +7,9 @@ import { DetailAttachments } from './DetailAttachments';
 import { ChildConversation } from './ChildConversation';
 import { editableData, markdown, resultTable, tableFields, type ExperimentDetailData, type TableRow } from './detail-model';
 import { statuses } from './model';
+import { FlexibleRecord } from '../record-document/FlexibleRecord';
+import type { RecordValue } from '../record-document/model';
+import { StructureProposal } from '../record-document/StructureProposal';
 
 function StatusSlider({ value, save }: { value: string; save: (value: string) => void }) {
   const slider = useRef<HTMLDivElement>(null);
@@ -35,6 +38,7 @@ export function ExperimentDetail({ expId }: { expId: string }) {
   const [child, setChild] = useState(false), [tag, setTag] = useState('');
   const [feedback, setFeedback] = useState<{ message: string; error?: boolean; conflict?: boolean } | null>(null);
   const [loadError, setLoadError] = useState('');
+  const [structureProposal, setStructureProposal] = useState('');
   const request = useRef(new AbortController()), saving = useRef(false), conflict = useRef(false);
   const load = useCallback(async () => {
     const body = await requestJson('/api/v1/experiments/' + encodeURIComponent(expId), { signal: request.current.signal });
@@ -87,6 +91,7 @@ export function ExperimentDetail({ expId }: { expId: string }) {
     finally { saving.current = false; if (!request.current.signal.aborted) setPending(false); }
   }
   if (!exp || !draft) return <div className="flash" role={loadError ? 'alert' : 'status'}>{loadError || '加载中…'}</div>;
+  if (exp.format_version === 2) return <FlexibleRecord initial={exp as unknown as RecordValue} />;
   const current = editing ? draft : exp;
   const dirty = JSON.stringify(editableData(draft)) !== JSON.stringify(editableData(exp));
   const busy = pending || attachmentBusy;
@@ -122,6 +127,11 @@ export function ExperimentDetail({ expId }: { expId: string }) {
   }
   const locked = (extra = false) => editing || busy || extra;
   return <EditorContext.Provider value={{ editing, open: setTarget }}><style>{pageStyles}</style>
+    {!!exp.document && !editing && <button type="button" className="outline" disabled={busy} onClick={() => void action(async () => {
+      const body = await requestJson(`/api/v1/experiments/${encodeURIComponent(expId)}/structure-proposals`, { method: 'POST', body: JSON.stringify({ expected_revision: exp.revision, document: exp.document }) });
+      setStructureProposal(body.data.id);
+    })}>预览并升级为三板块记录</button>}
+    {structureProposal && <StructureProposal id={structureProposal} updated={() => void load()} />}
     <div id="experiment-save-feedback" className={`flash${feedback ? feedback.error ? ' flash-error' : ' flash-success' : ''}`} role="status" aria-live="polite" hidden={!feedback}>{feedback?.message}
       {feedback?.conflict && <button type="button" className="outline" style={{ marginLeft: '0.6rem' }} onClick={reloadLatest}>加载最新内容</button>}</div>
     <div className="experiment-detail-header"><div style={{ minWidth: 0 }}>

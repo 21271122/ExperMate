@@ -80,7 +80,7 @@ def create_app(overrides=None):
         if "JWT_SECRET" in manager.overrides:
             raise RuntimeError("JWT_SECRET 环境变量或运行参数不能为空")
         manager.save({"JWT_SECRET": secrets.token_hex(32)})
-    app = Flask(__name__)
+    app = Flask(__name__, static_folder=None, template_folder=None)
     app.config.update(MAX_CONTENT_LENGTH=16 * 1024 * 1024, SERVER_MODE=True,
                       JWT_SECRET=config["JWT_SECRET"], EXDIARY_CONFIG=config,
                       DATA_DIR=data_dir, ACCOUNT_DB_PATH=data_dir / "_e2ee_accounts.db",
@@ -120,6 +120,7 @@ def create_app(overrides=None):
     from lib.services.experiment import ExperimentService
     from lib.services.extraction import ExtractionService
     from lib.services.template import TemplateService
+    from lib.services.record_document import RecordDocumentService
     db = ThreadSafeConnection(conn)
     ctx.connections.append(db)
     db.execute("CREATE TABLE IF NOT EXISTS legacy_uploads (user_id TEXT NOT NULL, path TEXT NOT NULL, sha256 TEXT NOT NULL, PRIMARY KEY(user_id,path))")
@@ -137,6 +138,8 @@ def create_app(overrides=None):
     def get_analyze_llm():
         return _configured_llm(config, "analyze")
     services = {
+        "record_svc": RecordDocumentService(db, repositories["exp_repo"], repositories["update_log_repo"],
+                                            _uid_provider, repositories["attachment_store"]),
         "experiment_svc": ExperimentService(repositories["exp_repo"], repositories["update_log_repo"], repositories["favorites_repo"]),
         "extraction_svc": ExtractionService(None),
         "analysis_svc": AnalysisService(repositories["exp_repo"], repositories["analysis_repo"], get_analyze_llm,
@@ -215,12 +218,13 @@ def create_app(overrides=None):
     from routes.api_upload import api_upload_bp
     from routes.api_v1 import api_v1_bp
     from routes.dashboard import dashboard_bp
+    from routes.api_record import api_record_bp
     from routes.experiment import experiment_bp
     from routes.pages import pages_bp
     from routes.settings import settings_bp
     from routes.templates import templates_bp
     from routes.uploads import uploads_bp
-    for blueprint, prefix in [(dashboard_bp, ""), (pages_bp, ""), (settings_bp, ""), (templates_bp, ""),
+    for blueprint, prefix in [(api_record_bp, "/api/v1"), (dashboard_bp, ""), (pages_bp, ""), (settings_bp, ""), (templates_bp, ""),
             (experiment_bp, "/experiments"), (api_experiment_bp, "/api"), (api_agent_bp, "/api/agent"),
             (api_child_bp, "/api"), (api_analysis_bp, "/api"), (api_search_bp, "/api"),
             (api_favorites_bp, "/api"), (api_attachment_bp, "/api"), (api_music_bp, "/api"), (api_v1_bp, "/api/v1"), (uploads_bp, ""), (api_upload_bp, "/api")]:

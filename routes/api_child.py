@@ -236,7 +236,7 @@ def api_exp_chat(exp_id):
                 thread_repo=g.thread_repo, update_log_repo=g.update_log_repo,
                 favorites_repo=g.favorites_repo, analysis_repo=g.analysis_repo,
                 analysis_svc=g.analysis_svc, extraction_svc=g.extraction_svc,
-                attachment_store=g.attachment_store)
+                record_svc=getattr(g, "record_svc", None), attachment_store=g.attachment_store)
             _restore_experiment_child_identity(agent, exp_id)
             if user_message:
                 if wants_stream:
@@ -277,7 +277,7 @@ def api_exp_chat(exp_id):
             llm, g.exp_repo, exp_data,
             thread_repo=g.thread_repo, update_log_repo=g.update_log_repo,
             favorites_repo=g.favorites_repo, analysis_repo=g.analysis_repo,
-            attachment_store=g.attachment_store)
+            record_svc=getattr(g, "record_svc", None), attachment_store=g.attachment_store)
         _restore_experiment_child_identity(agent, exp_id)
         agent._append_history({
             "role": "system",
@@ -299,7 +299,7 @@ def api_exp_chat(exp_id):
             thread_repo=g.thread_repo, update_log_repo=g.update_log_repo,
             favorites_repo=g.favorites_repo, analysis_repo=g.analysis_repo,
             analysis_svc=g.analysis_svc, extraction_svc=g.extraction_svc,
-            attachment_store=g.attachment_store)
+            record_svc=getattr(g, "record_svc", None), attachment_store=g.attachment_store)
         _restore_experiment_child_identity(agent, exp_id, thread_id)
         if user_message:
             if wants_stream:
@@ -316,7 +316,7 @@ def api_exp_chat(exp_id):
                        update_log_store=g.update_log_repo,
                        favorites_store=g.favorites_repo,
                        analysis_store=g.analysis_repo, analysis_svc=g.analysis_svc, extraction_svc=g.extraction_svc,
-                       attachment_store=g.attachment_store)
+                       record_svc=getattr(g, "record_svc", None), attachment_store=g.attachment_store)
     agent = build_child_for_thread(parent, thread_id, "exp_editor")
     _restore_experiment_child_identity(agent, exp_id, thread_id)
     agent._append_history({

@@ -356,7 +356,7 @@ def api_agent_start():
         thread_repo=g.thread_repo, update_log_repo=g.update_log_repo,
         favorites_repo=g.favorites_repo, analysis_repo=g.analysis_repo,
         analysis_svc=g.analysis_svc, extraction_svc=g.extraction_svc,
-        attachment_store=g.attachment_store,
+        record_svc=getattr(g, "record_svc", None), attachment_store=g.attachment_store,
         **_context_compression_options(),
     )
 
@@ -485,7 +485,7 @@ def api_agent_selection():
             thread_repo=g.thread_repo, update_log_repo=g.update_log_repo,
             favorites_repo=g.favorites_repo, analysis_repo=g.analysis_repo,
             analysis_svc=g.analysis_svc, extraction_svc=g.extraction_svc,
-            attachment_store=g.attachment_store,
+            record_svc=getattr(g, "record_svc", None), attachment_store=g.attachment_store,
             **_context_compression_options(),
         )
         state, error = _resolve_selector(agent, tool_call_id, status, selected_ids)
@@ -529,7 +529,7 @@ def api_agent_message():
             thread_repo=g.thread_repo, update_log_repo=g.update_log_repo,
             favorites_repo=g.favorites_repo, analysis_repo=g.analysis_repo,
             analysis_svc=g.analysis_svc, extraction_svc=g.extraction_svc,
-            attachment_store=g.attachment_store,
+            record_svc=getattr(g, "record_svc", None), attachment_store=g.attachment_store,
             **_context_compression_options(),
         )
         agent.set_data_freshness_context(_agent_data_freshness_context())
@@ -544,7 +544,8 @@ def api_agent_message():
                 preview["id"] = g.exp_repo.next_id()
             refs = g.experiment_svc.extract_references(notes)
             preview["references"] = refs
-            g.exp_repo.save(preview)
+            if preview.get("format_version") != 2:
+                g.exp_repo.save(preview)
             g.experiment_svc.update_referenced_by(preview["id"], refs)
             publish_named_resource_change("experiment", "created", exp_id=preview["id"])
             return jsonify({"ok": True, "type": "saved", "exp_id": preview["id"],
@@ -586,7 +587,7 @@ def api_agent_message_stream():
             thread_repo=g.thread_repo, update_log_repo=g.update_log_repo,
             favorites_repo=g.favorites_repo, analysis_repo=g.analysis_repo,
             analysis_svc=g.analysis_svc, extraction_svc=g.extraction_svc,
-            attachment_store=g.attachment_store,
+            record_svc=getattr(g, "record_svc", None), attachment_store=g.attachment_store,
             **_context_compression_options(),
         )
     except Exception:
@@ -633,7 +634,8 @@ def api_agent_message_stream():
                             preview["id"] = g.exp_repo.next_id()
                         refs = g.experiment_svc.extract_references(notes)
                         preview["references"] = refs
-                        g.exp_repo.save(preview)
+                        if preview.get("format_version") != 2:
+                            g.exp_repo.save(preview)
                         g.experiment_svc.update_referenced_by(preview["id"], refs)
                         event["exp_id"] = preview["id"]
                         event["type"] = "saved"

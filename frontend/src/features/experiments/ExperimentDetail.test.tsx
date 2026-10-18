@@ -89,6 +89,7 @@ test('附件部分成功后只保留失败文件，后续正文保存保留已�
       return reply({ ok: true, revision: 5, attachment: record.attachments![0] });
     } return base(url, options);
   });
+  await user.click(screen.getByText('添加附件', { selector: 'summary' }));
   await user.upload(document.getElementById('attachment-file') as HTMLInputElement, [new File(['a'], 'a.txt', { type: 'text/plain' }), new File(['b'], 'b.txt', { type: 'text/plain' })]);
   await user.click(screen.getByRole('button', { name: '添加附件' })); await screen.findByText('第二个附件失败');
   expect(document.getElementById('attachment-file-selection')).toHaveTextContent('b.txt');
@@ -106,6 +107,7 @@ test('附件已保存但完整记录刷新失败时，禁止用旧快照的新�
     if (url === '/api/v1/experiments/E1' && uploaded) return reply({ error: '暂时无法加载' }, 503);
     return base(url, options);
   });
+  await user.click(screen.getByText('添加附件', { selector: 'summary' }));
   await user.upload(document.getElementById('attachment-file') as HTMLInputElement, new File(['a'], 'a.txt', { type: 'text/plain' }));
   await user.click(screen.getByRole('button', { name: '添加附件' })); await screen.findByText('附件已变更，但最新记录加载失败。请重新加载后继续编辑。');
   expect(screen.getByRole('button', { name: '编辑' })).toBeDisabled(); expect(screen.getByRole('button', { name: '加载最新内容' })).toBeEnabled();

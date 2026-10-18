@@ -437,6 +437,8 @@ html:root { scrollbar-gutter: auto; background: var(--white); }
 .msg-row.tool .msg-content {
   max-width: 560px; width: auto;
 }
+.msg-row.record-proposal-row .msg-wrap { width: 100%; max-width: 100%; }
+.msg-row.record-proposal-row .msg-content { width: 100%; max-width: 100%; }
 
 /* Schema status card (system message) */
 .schema-status {
@@ -482,21 +484,21 @@ html:root { scrollbar-gutter: auto; background: var(--white); }
 /* ---- Tool Cards ---- */
 
 .tool-card {
-  margin: 8px 0 12px;
+  margin: var(--space-2) 0 var(--space-3);
   border: var(--border) solid var(--black);
   background: var(--white); box-shadow: var(--shadow);
-  overflow: hidden; font-size: 0.82rem;
+  overflow: hidden; font-size: var(--type-body); font-family: var(--font-ui);
 }
 .tool-card-enter { animation: chat-card-enter 280ms cubic-bezier(.2,.8,.2,1) both; }
 .tool-card-header {
-  padding: 5px 12px; font-size: 0.68rem; font-weight: 700;
+  padding: var(--space-1) var(--space-3); font-size: var(--type-caption); font-weight: 700;
   text-transform: uppercase; letter-spacing: 1px;
   background: var(--off-white); border-bottom: 2px solid var(--black);
 }
-.tool-card-body { padding: 10px 12px; line-height: 1.55; }
+.tool-card-body { padding: var(--space-2) var(--space-3); line-height: 1.5; }
 .tool-card-footer {
-  padding: 5px 12px; font-size: 0.7rem; font-weight: 600;
-  border-top: 2px solid var(--black); background: var(--off-white);
+  padding: var(--space-1) var(--space-3); font-size: var(--type-caption); font-weight: 600;
+  border-top: var(--border-control) solid var(--black); background: var(--off-white);
 }
 .tool-card.diff   { border-left: var(--border-thick) solid var(--blue); }
 .tool-card.answer { border-left: var(--border-thick) solid var(--red); }

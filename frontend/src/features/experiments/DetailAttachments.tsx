@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { services } from '../../runtime/services';
 import { requestJson } from '../../shared/api';
 import type { Attachment } from './detail-model';
+import './detail-attachments.css';
 
 const isImage = (item: Attachment) => item.mime?.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp)$/i.test(item.name || '');
 function typeLabel(item: Attachment) {
@@ -26,8 +27,8 @@ function AttachmentImage({ item }: { item: Attachment }) {
     onClick={() => services.AttachmentViewer?.open(item)} />;
 }
 
-export function DetailAttachments({ expId, revision, locked, onBusy, onConflict, onChanged }: {
-  expId: string; revision: number; locked: boolean; onBusy: (busy: boolean) => void; onConflict: (error: unknown) => void; onChanged: () => Promise<void>;
+export function DetailAttachments({ expId, revision, locked, onBusy, onConflict, onChanged, label = '12. 附件' }: {
+  expId: string; revision: number; locked: boolean; onBusy: (busy: boolean) => void; onConflict: (error: unknown) => void; onChanged: () => Promise<void>; label?: string;
 }) {
   const [items, setItems] = useState<Attachment[]>([]), [files, setFiles] = useState<File[]>([]), [title, setTitle] = useState(''), [status, setStatus] = useState(''), [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null), controller = useRef(new AbortController()), pending = useRef(false), currentRevision = useRef(revision);
@@ -80,9 +81,9 @@ export function DetailAttachments({ expId, revision, locked, onBusy, onConflict,
       updateRevision(result.revision); services.ExdiarySound?.play('delete'); await load();
     });
   }
-  return <details className={`section-group${locked ? ' edit-locked' : ''}`} id="attachment-section" data-edit-lock aria-disabled={locked} inert={locked} open>
-    <summary>12. 附件 <span id="attachment-count">{items.length}</span></summary>
-    <div id="attachment-list" style={{ display: 'grid', gap: '0.45rem', margin: '0.7rem 0' }}>{!items.length ? <small style={{ opacity: 0.65 }}>还没有附件。</small> : items.map(item => <details key={item.sha256}
+  return <details className={`section-group detail-attachments${locked ? ' edit-locked' : ''}`} id="attachment-section" data-edit-lock aria-disabled={locked} inert={locked} open>
+    <summary>{label} <span id="attachment-count">{items.length}</span></summary>
+    <div id="attachment-list">{!items.length ? <small style={{ opacity: 0.65 }}>还没有附件。</small> : items.map(item => <details key={item.sha256}
       style={{ border: '2px solid var(--black)', padding: '0.45rem 0.6rem', background: 'var(--off-white)' }} open={!!isImage(item)}>
       <summary style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, cursor: 'pointer' }}>
         <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{item.title || item.caption || item.name || item.sha256}</span>
@@ -95,13 +96,17 @@ export function DetailAttachments({ expId, revision, locked, onBusy, onConflict,
         {item.description && <small style={{ display: 'block', marginTop: '0.3rem' }}>{item.description}</small>}
         {isImage(item) ? <AttachmentImage item={item} /> : <button type="button" style={{ fontWeight: 700, color: 'var(--black)', padding: 0, border: 0, background: 'none', textDecoration: 'underline', cursor: 'pointer', marginTop: '0.35rem' }} onClick={() => services.AttachmentViewer?.open(item)}>{item.name || item.sha256}</button>}
       </div></div></details>)}</div>
-    <form id="attachment-upload-form" style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }} onSubmit={upload}>
-      <input ref={input} id="attachment-file" type="file" multiple disabled={busy} accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.pdf,.csv,.txt,.xlsx,image/*,application/pdf,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style={{ maxWidth: '100%' }}
-        onChange={e => { setFiles(Array.from(e.target.files || [])); setStatus('点击“添加附件”开始上传'); }} />
-      <small id="attachment-file-selection" style={{ fontWeight: 700, opacity: 0.65 }}>{files.length === 1 ? '已选择：' + files[0].name : files.length ? `已选择 ${files.length} 个附件` : '未选择附件'}</small>
-      <input id="attachment-title" type="text" maxLength={200} placeholder="附件标题（默认文件名）" style={{ flex: 1, minWidth: 160 }} disabled={busy} value={title} onChange={e => setTitle(e.target.value)} />
-      <button id="attachment-upload-btn" type="submit" className="outline" style={{ fontSize: '0.75rem' }} disabled={busy}>添加附件</button>
-      <small id="attachment-status" style={{ fontWeight: 700, opacity: 0.65 }}>{status}</small></form>
-    <small style={{ display: 'block', marginTop: '0.5rem', opacity: 0.65 }}>支持图片、PDF、CSV、TXT；单个文件最大 16 MB。附件保存在服务端，按账号隔离。</small>
+    <details className="attachment-compose"><summary>添加附件</summary>
+    <form id="attachment-upload-form" onSubmit={upload} aria-label="添加实验附件">
+      <div className="attachment-file-field"><span className="attachment-control-label">文件 <span className="attachment-optional">可多选</span></span><div className="attachment-file-picker">
+        <input ref={input} id="attachment-file" type="file" multiple disabled={busy} hidden accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.pdf,.csv,.txt,.xlsx,image/*,application/pdf,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          onChange={e => { setFiles(Array.from(e.target.files || [])); setStatus(''); }} />
+        <button type="button" className="outline" disabled={busy} onClick={() => input.current?.click()} aria-describedby="attachment-file-selection">选择文件</button>
+        <span id="attachment-file-selection">{files.length === 1 ? files[0].name : files.length ? `已选择 ${files.length} 个文件` : '尚未选择文件'}</span>
+      </div><small className="attachment-upload-help">支持图片、PDF、CSV、TXT、Excel · 单个文件最大 16 MB</small></div>
+      <label className="attachment-title-field" htmlFor="attachment-title"><span className="attachment-control-label">附件标题 <span className="attachment-optional">可选</span></span><input id="attachment-title" type="text" maxLength={200} placeholder="留空使用文件名" disabled={busy} value={title} onChange={e => setTitle(e.target.value)} /></label>
+      <div className="attachment-upload-actions"><button id="attachment-upload-btn" type="submit" disabled={busy || !files.length}>{busy ? '添加中…' : '添加附件'}</button></div>
+      {status && <small id="attachment-status" role="status">{status}</small>}
+    </form></details>
   </details>;
 }

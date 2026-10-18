@@ -70,6 +70,13 @@ def import_workspace(source, target, account, backup_dir, *, source_user="", upl
             rows = old.execute(f'SELECT * FROM "{table}" WHERE user_id=?', (source_user,)).fetchall() if "user_id" in columns else old.execute(f'SELECT * FROM "{table}"').fetchall()
             records[table] = [dict(row) for row in rows]
             for row in records[table]:
+                if table == 'experiments':
+                    version = int(row.get('format_version') or 1)
+                    if version not in (1, 2):
+                        raise ValueError('源库包含不支持的实验正文版本')
+                    if version == 2:
+                        from lib.core.record_document import validate_document
+                        validate_document(json.loads(row.get('document_json') or '{}'))
                 if table == "attachments":
                     content = row.get("data")
                     if content is None or hashlib.sha256(content).hexdigest() != row["sha256"]:

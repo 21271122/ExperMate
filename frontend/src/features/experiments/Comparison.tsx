@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { usePageData } from '../../app/usePageData';
 import { markdown, resultTable, tableFields, type ExperimentDetailData, type TableRow } from './detail-model';
 import { statuses } from './model';
+import { RecordDocument } from '../record-document/RecordDocument';
+import type { RecordDocument as DocumentData } from '../record-document/model';
 
 const colors = ['#2563eb', '#dc2626', '#16a34a', '#9333ea'];
 function Table({ rows, keys, headers }: { rows: TableRow[]; keys: string[]; headers: string[] }) {
@@ -12,6 +14,7 @@ export function Comparison() {
   const ids = new URLSearchParams(location.search).get('ids') || '';
   const { data, error } = usePageData<ExperimentDetailData[]>('/api/v1/compare?ids=' + encodeURIComponent(ids), '/compare');
   if (!data) return <div className={`flash${error ? ' flash-error' : ''}`} role={error ? 'alert' : 'status'}>{error || '加载中…'}</div>;
+  if (data.some(record => record.format_version === 2)) return <><h1>实验对比</h1>{data.map(record => <section key={record.id} style={{ borderLeft: '5px solid var(--black)', paddingLeft: '1rem' }}><h2>{record.id} · {record.title}</h2>{record.document ? <RecordDocument value={record.document as DocumentData} /> : <p>此旧记录请打开详情查看：<a href={`/experiments/${record.id}`}>{record.title || record.id}</a></p>}</section>)}</>;
   function section(label: string, has: (exp: ExperimentDetailData) => boolean, content: (exp: ExperimentDetailData) => ReactNode, footer = false) {
     if (!data!.some(has)) return null;
     return <details className="section-group" open><summary style={{ borderBottom: '3px solid var(--black)' }}>{label}</summary><div style={{ marginTop: '0.5rem' }}>
